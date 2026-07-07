@@ -1,0 +1,32 @@
+# WC-agent 本地开发依赖：Redis（短期会话记忆）+ MySQL（长期用户记忆）
+# 用法（在本文件所在目录 D:\code\WC-agent 下）：
+#   docker compose up -d      启动（后台）
+#   docker ps                 查看容器
+#   docker compose down       停止（数据保留）
+#   docker compose down -v    停止并清空数据卷
+services:
+  redis:
+    image: redis:7
+    container_name: wc-redis
+    ports:
+      - "6379:6379"           # 主机:容器，程序连 localhost:6379
+    volumes:
+      - wc-redis-data:/data   # 持久化，容器删了数据还在
+    restart: unless-stopped
+
+  mysql:
+    image: mysql:8
+    container_name: wc-mysql
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: wcpass   # root 密码（本地开发用，勿用于生产）
+      MYSQL_DATABASE: wc_agent      # 启动时自动创建这个库
+    volumes:
+      - wc-mysql-data:/var/lib/mysql
+    restart: unless-stopped
+
+# 具名数据卷：由 Docker 管理，持久化到本机磁盘
+volumes:
+  wc-redis-data:
+  wc-mysql-data:
