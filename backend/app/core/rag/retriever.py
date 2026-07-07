@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from app.config.settings import settings
 from app.core.rag import embedder
-from app.db import vector_store
+from app.infra.repositories import vector_repository as vector_store
 from app.utils.logger import logger
 from app.utils.teammatch import same_team
 

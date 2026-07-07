@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.core.eval import repo, resolver
+from app.core.eval import resolver
+from app.infra.repositories import prediction_repository as repo
 
 router = APIRouter()
 

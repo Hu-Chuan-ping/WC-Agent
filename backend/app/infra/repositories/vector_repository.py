@@ -4,7 +4,8 @@ import chromadb
 
 from app.config.settings import settings
 
-# Chroma 持久化客户端 + collection，均懒加载单例。
+# 向量库仓库（Chroma 持久化 collection），懒加载单例。
+# 只负责“原文+向量+元数据”的增删查，检索策略(阈值/两阶段)在 core/rag/retriever。
 _client: chromadb.ClientAPI | None = None
 _collection = None
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 
-from app.utils.client import get_fast_client
+from app.infra.llm.client import get_fast_client
 from app.utils.logger import logger
 
 # 一次快模型调用同时完成：判定意图(predict/chat) + 抽取对阵球队。

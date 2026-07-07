@@ -1,44 +1,22 @@
 from __future__ import annotations
 
-import httpx
-
-from app.config.settings import settings
-from app.core.eval import metrics, repo
+from app.core.eval import metrics
+from app.infra.external import football_data
+from app.infra.repositories import prediction_repository as repo
 from app.utils.logger import logger
 from app.utils.teammatch import same_team
 
-_TIMEOUT = 20.0
-
-
-async def _fetch_wc_results() -> list[dict]:
-    """从 football-data 拉世界杯所有已结束比赛的终场比分。"""
-    headers = {"X-Auth-Token": settings.football_data_api_key}
-    async with httpx.AsyncClient(timeout=_TIMEOUT, trust_env=False) as c:
-        r = await c.get(
-            f"{settings.football_data_base_url}/competitions/WC/matches?status=FINISHED",
-            headers=headers,
-        )
-        r.raise_for_status()
-        data = r.json()
-    out = []
-    for m in data.get("matches", []):
-        ft = (m.get("score") or {}).get("fullTime") or {}
-        if ft.get("home") is None:
-            continue
-        out.append({
-            "home": m["homeTeam"]["name"], "away": m["awayTeam"]["name"],
-            "h": ft["home"], "a": ft["away"],
-        })
-    return out
+# 赛后结算（领域编排）：查赛果(网关) → 匹配对阵 → 算 Brier/log-loss(metrics) → 落库(repo)。
+# 本文件不含任何 HTTP/SQL 细节，只编排三方。
 
 
 def _find_result(results: list[dict], home: str, away: str) -> tuple[int, int] | None:
     """按队名找赛果，返回 (我方主队进球, 我方客队进球)。"""
     for m in results:
         if same_team(m["home"], home) and same_team(m["away"], away):
-            return m["h"], m["a"]
-        if same_team(m["home"], away) and same_team(m["away"], home):  # 主客顺序反了 → 比分对调
-            return m["a"], m["h"]
+            return m["home_goals"], m["away_goals"]
+        if same_team(m["home"], away) and same_team(m["away"], home):  # 主客反了 → 比分对调
+            return m["away_goals"], m["home_goals"]
     return None
 
 
@@ -47,7 +25,11 @@ async def resolve_pending() -> int:
     pend = await repo.list_pending()
     if not pend:
         return 0
-    results = await _fetch_wc_results()
+    # 只要已结束、且有比分的场次
+    results = [
+        m for m in await football_data.fetch_wc_matches(status="FINISHED")
+        if m["home_goals"] is not None
+    ]
 
     resolved = 0
     for row in pend:

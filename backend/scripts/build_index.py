@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.core.rag import embedder  # noqa: E402
 from app.core.rag.parser import load_docx  # noqa: E402
 from app.core.rag.splitter import split_into_matches  # noqa: E402
-from app.db import vector_store  # noqa: E402
+from app.infra.repositories import vector_repository as vector_store  # noqa: E402
 from app.utils.logger import logger  # noqa: E402
 
 DOC_DIR = "D:/code/WC-agent/doc_rag"

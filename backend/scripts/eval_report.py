@@ -12,12 +12,13 @@ import sys
 sys.stdout.reconfigure(encoding="utf-8")
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.core.eval import repo, resolver  # noqa: E402
-from app.db.mysql_client import close_pool  # noqa: E402
+from app.core.eval import resolver  # noqa: E402
+from app.infra.db.mysql_client import close_pool  # noqa: E402
+from app.infra.repositories import prediction_repository as repo  # noqa: E402
 
 
 async def main() -> None:
-    await repo.ensure_tables()
+    await repo.ensure_table()
     n = await resolver.resolve_pending()
     print(f"本次结算 {n} 场")
     agg = await repo.aggregate()

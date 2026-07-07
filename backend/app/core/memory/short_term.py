@@ -1,36 +1,30 @@
 from __future__ import annotations
 
-import json
-
 from app.config.settings import settings
-from app.db.redis_client import get_redis
+from app.infra.repositories import session_repository
 
-# 短期会话记忆：Redis LIST，key = session:{session_id}，
-# 每个元素是一条消息的 JSON 串（append-only + 滑动窗口 + TTL）。
-
-
-def _key(session_id: str) -> str:
-    return f"session:{session_id}"
+# 短期会话记忆（领域服务）：定义“一轮=用户+助手两条消息”、滑动窗口与 TTL 等策略，
+# 具体的 Redis 存取交给 session_repository。
 
 
 async def load_history(session_id: str) -> list[dict]:
     """按时间顺序返回该会话的消息列表：[{"role","content"}, ...]。"""
-    raw = await get_redis().lrange(_key(session_id), 0, -1)
-    return [json.loads(x) for x in raw]
+    return await session_repository.load(session_id)
 
 
 async def append_turn(session_id: str, user_msg: str, assistant_msg: str) -> None:
-    """追加一轮（用户+助手）；滑动窗口只留最近 N 条；刷新过期时间。"""
-    r = get_redis()
-    key = _key(session_id)
-    await r.rpush(
-        key,
-        json.dumps({"role": "user", "content": user_msg}, ensure_ascii=False),
-        json.dumps({"role": "assistant", "content": assistant_msg}, ensure_ascii=False),
+    """追加一轮（用户+助手）；按策略裁剪窗口并续期。"""
+    messages = [
+        {"role": "user", "content": user_msg},
+        {"role": "assistant", "content": assistant_msg},
+    ]
+    await session_repository.append(
+        session_id,
+        messages,
+        max_messages=settings.session_max_messages,
+        ttl_seconds=settings.session_ttl_seconds,
     )
-    await r.ltrim(key, -settings.session_max_messages, -1)  # 砍掉过旧的，保留最近 N 条
-    await r.expire(key, settings.session_ttl_seconds)       # 每次访问续期 → 滑动过期
 
 
 async def clear(session_id: str) -> None:
-    await get_redis().delete(_key(session_id))
+    await session_repository.delete(session_id)

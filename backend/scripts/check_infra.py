@@ -12,8 +12,8 @@ import sys
 sys.stdout.reconfigure(encoding="utf-8")
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.db.mysql_client import close_pool, get_pool  # noqa: E402
-from app.db.redis_client import close_redis, get_redis  # noqa: E402
+from app.infra.db.mysql_client import close_pool, get_pool  # noqa: E402
+from app.infra.db.redis_client import close_redis, get_redis  # noqa: E402
 
 
 async def check_redis() -> None:

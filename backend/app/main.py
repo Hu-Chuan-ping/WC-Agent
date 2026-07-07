@@ -11,11 +11,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.v1 import dispatch, eval as eval_api
-from app.core.eval import repo as eval_repo
 from app.core.eval.resolver import resolve_pending
-from app.core.memory import long_term
-from app.db.mysql_client import close_pool
-from app.db.redis_client import close_redis
+from app.infra.db import schema
+from app.infra.db.mysql_client import close_pool
+from app.infra.db.redis_client import close_redis
 from app.utils.exceptions import AppError
 from app.utils.logger import logger
 
@@ -36,8 +35,7 @@ async def _periodic_resolve() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await long_term.ensure_tables()   # MySQL：user_profile 表
-    await eval_repo.ensure_tables()   # MySQL：predictions 表
+    await schema.ensure_all_tables()   # MySQL：user_profile + predictions 表
     try:
         await resolve_pending()       # 启动补扫：把关机期间结束的比赛补算
     except Exception:

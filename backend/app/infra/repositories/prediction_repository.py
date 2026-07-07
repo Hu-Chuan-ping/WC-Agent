@@ -2,38 +2,39 @@ from __future__ import annotations
 
 import aiomysql
 
-from app.db.mysql_client import get_pool
+from app.infra.db.mysql_client import get_pool
 
 # 预测记录仓库（MySQL predictions 表）。评估数据要长期累积，故用关系库而非 Redis。
+# 本文件是唯一直接操作 predictions 表 SQL 的地方；领域层(core)只调这里的方法。
+
+_DDL = """
+CREATE TABLE IF NOT EXISTS predictions (
+    id            INT AUTO_INCREMENT PRIMARY KEY,
+    user_id       VARCHAR(64),
+    session_id    VARCHAR(64),
+    home_team     VARCHAR(64),   -- 英文名（用于赛果匹配）
+    away_team     VARCHAR(64),
+    home_cn       VARCHAR(64),
+    away_cn       VARCHAR(64),
+    kickoff_time  VARCHAR(40),
+    agent_p_home  DOUBLE, agent_p_draw DOUBLE, agent_p_away DOUBLE,
+    agent_score   VARCHAR(16),
+    odds_p_home   DOUBLE, odds_p_draw DOUBLE, odds_p_away DOUBLE,
+    extra_json    TEXT,
+    actual_home   INT, actual_away INT, actual_outcome VARCHAR(8),
+    brier_agent   DOUBLE, brier_odds DOUBLE, logloss_agent DOUBLE,
+    status        VARCHAR(16) DEFAULT 'pending',
+    created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    resolved_at   TIMESTAMP NULL
+)
+"""
 
 
-async def ensure_tables() -> None:
+async def ensure_table() -> None:
     pool = await get_pool()
     async with pool.acquire() as conn:
         async with conn.cursor() as cur:
-            await cur.execute(
-                """
-                CREATE TABLE IF NOT EXISTS predictions (
-                    id            INT AUTO_INCREMENT PRIMARY KEY,
-                    user_id       VARCHAR(64),
-                    session_id    VARCHAR(64),
-                    home_team     VARCHAR(64),   -- 英文名（用于赛果匹配）
-                    away_team     VARCHAR(64),
-                    home_cn       VARCHAR(64),
-                    away_cn       VARCHAR(64),
-                    kickoff_time  VARCHAR(40),
-                    agent_p_home  DOUBLE, agent_p_draw DOUBLE, agent_p_away DOUBLE,
-                    agent_score   VARCHAR(16),
-                    odds_p_home   DOUBLE, odds_p_draw DOUBLE, odds_p_away DOUBLE,
-                    extra_json    TEXT,
-                    actual_home   INT, actual_away INT, actual_outcome VARCHAR(8),
-                    brier_agent   DOUBLE, brier_odds DOUBLE, logloss_agent DOUBLE,
-                    status        VARCHAR(16) DEFAULT 'pending',
-                    created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    resolved_at   TIMESTAMP NULL
-                )
-                """
-            )
+            await cur.execute(_DDL)
 
 
 async def insert_prediction(rec: dict) -> int:

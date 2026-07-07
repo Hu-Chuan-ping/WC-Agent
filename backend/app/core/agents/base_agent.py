@@ -7,8 +7,8 @@ from collections.abc import AsyncIterator
 from app.config.agent_config import AgentConfig
 from app.core.models import LLMResponse, ToolCall
 from app.core.tools.base_tool import BaseTool
+from app.infra.llm.client import LLMClient
 from app.utils import request_stats
-from app.utils.client import LLMClient
 from app.utils.exceptions import AppError, ConfigError
 from app.utils.logger import logger
 

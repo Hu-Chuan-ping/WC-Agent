@@ -11,6 +11,8 @@ from app.core.models import LLMResponse, ToolCall
 from app.utils.exceptions import LLMError
 from app.utils.logger import logger
 
+# 大模型网关：DeepSeek（OpenAI 兼容接口）的封装。属于“对外集成”，归 infra 层。
+
 # 按 (api_key, base_url) 缓存 AsyncOpenAI：同一提供商复用连接池；
 # 快模型若用不同 key/base 则各持一个。
 _shared_clients: dict[tuple[str, str], AsyncOpenAI] = {}

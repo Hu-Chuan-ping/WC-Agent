@@ -4,9 +4,9 @@ from collections.abc import AsyncIterator
 from app.core.agents.general.general_agent import GeneralAgent
 from app.core.agents.predictor.predictor_agent import PredictorAgent
 from app.core.eval import pending
-from app.core.eval import repo as eval_repo
 from app.core.interpreter import interpret
 from app.core.memory import long_term, short_term
+from app.infra.repositories import prediction_repository as eval_repo
 from app.core.router import Router
 from app.utils.logger import logged, logger
 
