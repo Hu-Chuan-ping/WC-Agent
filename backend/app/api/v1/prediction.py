@@ -5,6 +5,7 @@ from fastapi import APIRouter
 from app.core.eval import resolver
 from app.infra.repositories import prediction_repository as repo
 
+# 已预测比赛 / 评估相关接口（后续“列出我的预测”“赛后刷新”也加在这里）。
 router = APIRouter()
 
 

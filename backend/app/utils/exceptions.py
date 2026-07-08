@@ -51,6 +51,14 @@ class IntentRouteError(AppError):
     message = "无法识别请求意图"
 
 
+class AuthError(AppError):
+    """鉴权失败：验证码错误、用户名或密码不对、令牌无效/过期等。"""
+
+    code = 4010
+    http_status = 401
+    message = "身份验证失败"
+
+
 # ── 服务端 / 内部类（5xxx）────────────────────────────────────────
 
 class ConfigError(AppError):

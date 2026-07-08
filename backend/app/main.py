@@ -10,7 +10,9 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.v1 import dispatch, eval as eval_api
+from app.api.v1.auth import router as auth_router
+from app.api.v1.chat import router as chat_router
+from app.api.v1.prediction import router as prediction_router
 from app.core.eval.resolver import resolve_pending
 from app.infra.db import schema
 from app.infra.db.mysql_client import close_pool
@@ -57,8 +59,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(dispatch.router, prefix="/api/v1", tags=["dispatch"])
-app.include_router(eval_api.router, prefix="/api/v1", tags=["eval"])
+app.include_router(auth_router, prefix="/api/v1")
+app.include_router(chat_router, prefix="/api/v1", tags=["chat"])
+app.include_router(prediction_router, prefix="/api/v1", tags=["prediction"])
 
 
 @app.middleware("http")

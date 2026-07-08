@@ -1,0 +1,28 @@
+/* 全局基础样式：奶油白背景 + 字体 + 复位。组件级样式尽量走 AntD 主题或就近 CSS。 */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  background-color: #f8f7f4; /* 奶油白，见 theme.ts colors.bgBase */
+  color: #1f2933;
+  font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei",
+    Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 主内容容器：白色/半透明白兜底，保证在卡通背景上文字始终可读 */
+.content-surface {
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+}

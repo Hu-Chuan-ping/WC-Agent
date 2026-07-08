@@ -64,6 +64,14 @@ class Settings(BaseSettings):
     session_max_messages: int = 20     # 滑动窗口保留的消息条数（约 10 轮）
     session_ttl_seconds: int = 604800  # 会话空闲过期时间（7 天）
 
+    # 鉴权（JWT）——上线前务必在 .env 里覆盖 jwt_secret 为随机长串
+    jwt_secret: str = "dev-only-change-me-in-env"
+    jwt_algorithm: str = "HS256"
+    jwt_expire_minutes: int = 10080    # 令牌有效期（7 天）
+
+    # 图形验证码：答案存 Redis 的过期时间
+    captcha_ttl_seconds: int = 300     # 5 分钟内有效
+
     # 未来扩展其他提供商时在这里添加
     # anthropic_api_key: str = ""
     # serpapi_api_key: str = ""

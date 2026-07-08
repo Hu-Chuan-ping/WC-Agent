@@ -6,6 +6,7 @@ from fastapi.responses import StreamingResponse
 from app.models.schemas.chat import ChatRequest, ChatResponse
 from app.services.dispatch_service import DispatchService, get_dispatch_service
 
+# 对话相关接口（后续会话列表 / 历史查询也加在这里）。
 router = APIRouter()
 
 
