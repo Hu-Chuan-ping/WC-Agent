@@ -1,92 +1,176 @@
-import { Button, Card, Space, Table, Tag, Typography } from "antd";
+import { useEffect, useState } from "react";
+import { App, Button, Card, Space, Table, Tag, Typography } from "antd";
 import { ReloadOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
+import {
+  predictionApi,
+  type Overview,
+  type PredictionItem,
+  type PredictionSummary,
+} from "../api/prediction";
 import { colors } from "../theme/theme";
 
-// 静态壳页：已预测比赛列表 + 命中状态 + 汇总。后端接口将在切片 3 接入。
-interface PredictionRow {
-  key: string;
-  match: string;
-  kickoff: string;
-  predicted: string;
-  actual: string;
-  status: "pending" | "hit" | "half" | "miss";
-}
-
-const STATUS_META: Record<PredictionRow["status"], { text: string; color: string }> = {
+const STATUS_META: Record<PredictionItem["status"], { text: string; color: string }> = {
   pending: { text: "待验证", color: "default" },
   hit: { text: "全中", color: "green" },
   half: { text: "半中", color: "gold" },
   miss: { text: "未中", color: "red" },
 };
 
-const MOCK_ROWS: PredictionRow[] = [
-  { key: "1", match: "葡萄牙 vs 西班牙", kickoff: "2026-06-18 03:00", predicted: "1 - 2", actual: "1 - 2", status: "hit" },
-  { key: "2", match: "英格兰 vs 巴拿马", kickoff: "2026-06-20 21:00", predicted: "3 - 0", actual: "2 - 0", status: "half" },
-  { key: "3", match: "巴西 vs 德国", kickoff: "2026-06-25 03:00", predicted: "2 - 1", actual: "待开赛", status: "pending" },
-];
-
-const columns: ColumnsType<PredictionRow> = [
+const columns: ColumnsType<PredictionItem> = [
   { title: "比赛信息", dataIndex: "match", key: "match" },
-  { title: "比赛时间（北京）", dataIndex: "kickoff", key: "kickoff" },
+  { title: "比赛时间", dataIndex: "kickoff_time", key: "kickoff_time", render: (v) => v || "—" },
   {
     title: "预测比分",
-    dataIndex: "predicted",
-    key: "predicted",
-    render: (v) => <span style={{ color: colors.gold, fontWeight: 600 }}>{v}</span>,
+    dataIndex: "predicted_score",
+    key: "predicted_score",
+    render: (v) => <span style={{ color: colors.gold, fontWeight: 600 }}>{v || "—"}</span>,
   },
-  { title: "真实结果", dataIndex: "actual", key: "actual" },
+  { title: "真实结果", dataIndex: "actual_score", key: "actual_score", render: (v) => v || "待开赛" },
   {
     title: "命中状态",
     dataIndex: "status",
     key: "status",
-    render: (s: PredictionRow["status"]) => (
-      <Tag color={STATUS_META[s].color}>{STATUS_META[s].text}</Tag>
-    ),
+    render: (s: PredictionItem["status"]) => <Tag color={STATUS_META[s].color}>{STATUS_META[s].text}</Tag>,
   },
 ];
 
 export default function PredictionsPage() {
+  const { message } = App.useApp();
+  const [rows, setRows] = useState<PredictionItem[]>([]);
+  const [summary, setSummary] = useState<PredictionSummary | null>(null);
+  const [overview, setOverview] = useState<Overview | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const [r, s, o] = await Promise.all([
+        predictionApi.list(),
+        predictionApi.summary(),
+        predictionApi.overview(),
+      ]);
+      setRows(r);
+      setSummary(s);
+      setOverview(o);
+    } catch (e) {
+      message.error((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      const { resolved } = await predictionApi.resolve();
+      message.success(resolved > 0 ? `新结算 ${resolved} 场` : "暂无新结束的比赛");
+      await load();
+    } catch (e) {
+      message.error((e as Error).message);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   return (
     <Space direction="vertical" size={16} style={{ width: "100%" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <Space align="center">
-          <Typography.Title level={4} style={{ margin: 0 }}>
-            已预测比赛
-          </Typography.Title>
-          <Tag color="default" style={{ color: colors.textSecondary }}>
-            示例 · 待接后端
-          </Tag>
-        </Space>
-        <Button icon={<ReloadOutlined />}>刷新赛果</Button>
+        <Typography.Title level={4} style={{ margin: 0 }}>
+          已预测比赛
+        </Typography.Title>
+        <Button icon={<ReloadOutlined />} loading={refreshing} onClick={onRefresh}>
+          刷新赛果
+        </Button>
       </div>
 
-      <Card>
-        <Table<PredictionRow> columns={columns} dataSource={MOCK_ROWS} pagination={false} />
+      {summary && (
+        <Card title="我的预测汇总">
+          <div style={{ display: "flex", gap: 40, flexWrap: "wrap", marginBottom: 20 }}>
+            <Stat label="总预测" value={String(summary.total)} />
+            <Stat label="已结算" value={String(summary.resolved)} color={colors.sage} />
+            <Stat
+              label="全中率"
+              value={summary.hit_rate === null ? "—" : `${Math.round(summary.hit_rate * 100)}%`}
+              color={colors.gold}
+            />
+            <Stat label="击败赔率" value={`${summary.beats_odds} 场`} color={colors.sage} />
+            <Stat
+              label="平均 Brier（你/赔率）"
+              value={`${fmt(summary.avg_brier_agent)} / ${fmt(summary.avg_brier_odds)}`}
+            />
+          </div>
+          <DistributionBar hit={summary.hit} half={summary.half} miss={summary.miss} />
+        </Card>
+      )}
+
+      <Card loading={loading} title="预测明细">
+        <Table<PredictionItem> rowKey="id" columns={columns} dataSource={rows} pagination={{ pageSize: 10 }} />
       </Card>
 
-      <Card title="预测汇总">
-        <div style={{ display: "flex", gap: 32, flexWrap: "wrap" }}>
-          <Stat label="总预测" value="12" />
-          <Stat label="已结算" value="8" color={colors.sage} />
-          <Stat label="全中率" value="37.5%" color={colors.gold} />
-          <Stat label="击败赔率" value="3 场" color={colors.sage} />
-        </div>
-        <Typography.Text type="secondary" style={{ display: "block", marginTop: 16 }}>
-          图表区域（准确率趋势 / Brier 对比）将在接入后端后渲染。
-        </Typography.Text>
-      </Card>
+      {overview && (
+        <Card title="全局总预测偏差（所有比赛）">
+          <Space size={40} wrap>
+            <Stat label="全局已结算" value={`${overview.resolved} / ${overview.total}`} />
+            <Stat label="平均 Brier · 你" value={fmt(overview.avg_brier_agent)} color={colors.sage} />
+            <Stat label="平均 Brier · 赔率" value={fmt(overview.avg_brier_odds)} color={colors.gold} />
+          </Space>
+          <Typography.Paragraph style={{ marginTop: 16, marginBottom: 0 }}>
+            {overview.verdict}
+          </Typography.Paragraph>
+        </Card>
+      )}
     </Space>
   );
+}
+
+function fmt(v: number | null): string {
+  return v === null ? "—" : v.toFixed(3);
 }
 
 function Stat({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
     <div>
-      <div style={{ fontSize: 28, fontWeight: 700, color: color || colors.textPrimary }}>
-        {value}
-      </div>
+      <div style={{ fontSize: 26, fontWeight: 700, color: color || colors.textPrimary }}>{value}</div>
       <div style={{ color: colors.textSecondary, fontSize: 13 }}>{label}</div>
     </div>
+  );
+}
+
+function DistributionBar({ hit, half, miss }: { hit: number; half: number; miss: number }) {
+  const total = hit + half + miss;
+  if (total === 0) {
+    return <Typography.Text type="secondary">暂无已结算的预测</Typography.Text>;
+  }
+  const seg = (n: number, bg: string) =>
+    n > 0 ? <div style={{ width: `${(n / total) * 100}%`, background: bg }} /> : null;
+  return (
+    <div>
+      <div style={{ display: "flex", height: 16, borderRadius: 8, overflow: "hidden", marginBottom: 8 }}>
+        {seg(hit, "#7FA87F")}
+        {seg(half, colors.gold)}
+        {seg(miss, "#D98A8A")}
+      </div>
+      <Space size={16}>
+        <Legend color="#7FA87F" text={`全中 ${hit}`} />
+        <Legend color={colors.gold} text={`半中 ${half}`} />
+        <Legend color="#D98A8A" text={`未中 ${miss}`} />
+      </Space>
+    </div>
+  );
+}
+
+function Legend({ color, text }: { color: string; text: string }) {
+  return (
+    <span style={{ fontSize: 13, color: colors.textSecondary }}>
+      <span style={{ display: "inline-block", width: 10, height: 10, background: color, borderRadius: 3, marginRight: 6 }} />
+      {text}
+    </span>
   );
 }

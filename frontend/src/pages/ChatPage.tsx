@@ -1,43 +1,117 @@
-import { Button, Empty, Input, Tag, Typography } from "antd";
+import { useEffect, useRef, useState } from "react";
+import { App, Button, Empty, Input, Spin, Typography } from "antd";
 import { SendOutlined } from "@ant-design/icons";
+import ReactMarkdown from "react-markdown";
+import { useConversationStore } from "../store/conversationStore";
 import { colors } from "../theme/theme";
 
-// 对话区。会话列表已移到左侧边栏；这里只负责当前对话的消息流 + 输入。
-// 发送消息、加载历史等将在切片 2 接入后端。
 export default function ChatPage() {
+  const { message } = App.useApp();
+  const messages = useConversationStore((s) => s.messages);
+  const sending = useConversationStore((s) => s.sending);
+  const loadingMessages = useConversationStore((s) => s.loadingMessages);
+  const sendMessage = useConversationStore((s) => s.sendMessage);
+
+  const [input, setInput] = useState("");
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, sending]);
+
+  const onSend = async () => {
+    const q = input.trim();
+    if (!q || sending) return;
+    setInput("");
+    try {
+      await sendMessage(q);
+    } catch (e) {
+      message.error((e as Error).message);
+    }
+  };
+
+  const empty = messages.length === 0 && !loadingMessages;
+
   return (
     <div
       className="content-surface"
-      style={{
-        height: "calc(100vh - 112px)",
-        padding: 20,
-        display: "flex",
-        flexDirection: "column",
-      }}
+      style={{ height: "calc(100vh - 112px)", padding: 20, display: "flex", flexDirection: "column" }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-        <Typography.Title level={5} style={{ margin: 0 }}>
-          对话预测
-        </Typography.Title>
-        <Tag color="default" style={{ color: colors.textSecondary }}>
-          示例 · 待接后端
-        </Tag>
+      <Typography.Title level={5} style={{ margin: "0 0 12px" }}>
+        对话预测
+      </Typography.Title>
+
+      <div style={{ flex: 1, overflowY: "auto", paddingRight: 4 }}>
+        {loadingMessages && (
+          <div style={{ textAlign: "center", paddingTop: 40 }}>
+            <Spin />
+          </div>
+        )}
+        {empty && (
+          <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <Empty description="输入一场比赛，开始预测" />
+          </div>
+        )}
+
+        {messages.map((m, i) =>
+          m.role === "user" ? (
+            <div key={i} style={{ display: "flex", justifyContent: "flex-end", marginBottom: 14 }}>
+              <div
+                style={{
+                  maxWidth: "78%",
+                  background: "#EEF1EA",
+                  padding: "10px 14px",
+                  borderRadius: 14,
+                  whiteSpace: "pre-wrap",
+                }}
+              >
+                {m.content}
+              </div>
+            </div>
+          ) : (
+            <div key={i} style={{ display: "flex", justifyContent: "flex-start", marginBottom: 14 }}>
+              <div
+                className="md-body"
+                style={{
+                  maxWidth: "82%",
+                  background: "#FFFFFF",
+                  border: `1px solid ${colors.border}`,
+                  padding: "10px 16px",
+                  borderRadius: 14,
+                }}
+              >
+                <ReactMarkdown>{m.content}</ReactMarkdown>
+              </div>
+            </div>
+          )
+        )}
+
+        {sending && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, color: colors.textSecondary, marginBottom: 14 }}>
+            <Spin size="small" /> 正在分析预测…
+          </div>
+        )}
+        <div ref={bottomRef} />
       </div>
 
-      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <Empty description="在左侧选择或新建一个对话，开始预测比赛" />
+      <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+        <Input.TextArea
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              onSend();
+            }
+          }}
+          placeholder="输入你想预测的比赛，例如：巴西 vs 德国 谁会赢？（Enter 发送，Shift+Enter 换行）"
+          autoSize={{ minRows: 1, maxRows: 4 }}
+          disabled={sending}
+        />
+        <Button type="primary" icon={<SendOutlined />} onClick={onSend} loading={sending} style={{ height: "auto" }}>
+          发送
+        </Button>
       </div>
-
-      <Input.Search
-        size="large"
-        placeholder="输入你想预测的比赛，例如：巴西 vs 德国 谁会赢？"
-        enterButton={
-          <Button type="primary" icon={<SendOutlined />}>
-            发送
-          </Button>
-        }
-        disabled
-      />
     </div>
   );
 }
