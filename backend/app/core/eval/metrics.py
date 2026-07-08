@@ -16,6 +16,18 @@ def outcome_from_score(home_goals: int, away_goals: int) -> str:
     return "draw"
 
 
+def hit_status(agent_score: str | None, actual_home: int, actual_away: int) -> str:
+    """命中判定：全中(比分全对) / 半中(胜负对、比分错) / 未中(胜负都错)。"""
+    try:
+        ph, pa = (int(x) for x in str(agent_score).split("-"))
+    except (ValueError, AttributeError):
+        return "miss"  # 预测比分无法解析，按未中处理
+    if ph == actual_home and pa == actual_away:
+        return "hit"
+    same_outcome = outcome_from_score(ph, pa) == outcome_from_score(actual_home, actual_away)
+    return "half" if same_outcome else "miss"
+
+
 def brier(p_home: float, p_draw: float, p_away: float, outcome: str) -> float:
     """多分类 Brier：越低越准，范围 0~2。"""
     o = _ONEHOT[outcome]

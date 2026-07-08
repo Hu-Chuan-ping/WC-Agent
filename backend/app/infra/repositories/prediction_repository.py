@@ -111,6 +111,24 @@ async def list_resolved() -> list[dict]:
             return list(await cur.fetchall())
 
 
+async def list_by_user(user_id: str) -> list[dict]:
+    """某用户的全部预测（最新在前），供“已预测比赛”页展示与汇总。"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.cursor(aiomysql.DictCursor) as cur:
+            await cur.execute(
+                """
+                SELECT id, home_cn, away_cn, kickoff_time, agent_score,
+                       agent_p_home, agent_p_draw, agent_p_away,
+                       actual_home, actual_away, actual_outcome,
+                       brier_agent, brier_odds, status, session_id, created_at
+                FROM predictions WHERE user_id = %s ORDER BY created_at DESC
+                """,
+                (user_id,),
+            )
+            return list(await cur.fetchall())
+
+
 async def aggregate() -> dict:
     """已结算预测的汇总：你 vs 赔率的平均 Brier、log-loss、击败赔率次数。"""
     pool = await get_pool()

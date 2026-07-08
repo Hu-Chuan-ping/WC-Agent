@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 from app.api.v1.auth import router as auth_router
 from app.api.v1.chat import router as chat_router
 from app.api.v1.prediction import router as prediction_router
+from app.api.v1.user import router as user_router
 from app.core.eval.resolver import resolve_pending
 from app.infra.db import schema
 from app.infra.db.mysql_client import close_pool
@@ -62,6 +63,7 @@ app.add_middleware(
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(chat_router, prefix="/api/v1", tags=["chat"])
 app.include_router(prediction_router, prefix="/api/v1", tags=["prediction"])
+app.include_router(user_router, prefix="/api/v1", tags=["user"])
 
 
 @app.middleware("http")

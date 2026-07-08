@@ -1,0 +1,75 @@
+from __future__ import annotations
+
+import uuid
+
+from app.core.memory import short_term
+from app.infra.repositories import conversation_repository as repo
+from app.utils.exceptions import NotFoundError
+
+# 会话应用服务：编排“新建/列出/查看/重命名/删除”用例，并做归属校验。
+# 归属校验是真正的安全防线：任何按 session_id 的操作都先确认它属于当前用户。
+
+_TITLE_MAX = 20
+
+
+def _make_title(text: str) -> str:
+    t = text.strip().replace("\n", " ")
+    return t[:_TITLE_MAX] or "新对话"
+
+
+async def _assert_owner(user_id: str, session_id: str) -> dict:
+    """确认会话存在且属于该用户，返回会话行；否则 404（不泄露是否存在）。"""
+    s = await repo.get_session(session_id)
+    if s is None or s["user_id"] != user_id:
+        raise NotFoundError("会话不存在")
+    return s
+
+
+async def create_session(user_id: str) -> dict:
+    """新建一个空会话。"""
+    session_id = uuid.uuid4().hex
+    await repo.create_session(session_id, user_id)
+    return {"session_id": session_id, "title": "新对话"}
+
+
+async def list_sessions(user_id: str) -> list[dict]:
+    return await repo.list_sessions(user_id)
+
+
+async def get_messages(user_id: str, session_id: str) -> list[dict]:
+    await _assert_owner(user_id, session_id)
+    return await repo.list_messages(session_id)
+
+
+async def rename_session(user_id: str, session_id: str, title: str) -> None:
+    await _assert_owner(user_id, session_id)
+    await repo.rename_session(session_id, title.strip() or "新对话")
+
+
+async def delete_session(user_id: str, session_id: str) -> None:
+    await _assert_owner(user_id, session_id)
+    await repo.delete_messages(session_id)
+    await repo.delete_session(session_id)
+    await short_term.clear(session_id)  # 一并清掉 Redis 热窗口
+
+
+# ── 供 dispatch 复用的两个方法 ──────────────────────────────
+
+async def ensure_session(user_id: str, session_id: str | None) -> str:
+    """发消息前确保有一个属于该用户的会话：传了就校验归属，没传就新建。"""
+    if session_id:
+        await _assert_owner(user_id, session_id)
+        return session_id
+    new_id = uuid.uuid4().hex
+    await repo.create_session(new_id, user_id)
+    return new_id
+
+
+async def record_turn(session_id: str, user_msg: str, assistant_msg: str) -> None:
+    """把一轮对话持久化进 messages；首轮用问题生成标题；刷新活跃时间。"""
+    await repo.add_message(session_id, "user", user_msg)
+    await repo.add_message(session_id, "assistant", assistant_msg)
+    s = await repo.get_session(session_id)
+    if s and (not s["title"] or s["title"] == "新对话"):
+        await repo.rename_session(session_id, _make_title(user_msg))
+    await repo.touch_session(session_id)

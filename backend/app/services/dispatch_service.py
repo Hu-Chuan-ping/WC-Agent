@@ -1,4 +1,3 @@
-import uuid
 from collections.abc import AsyncIterator
 
 from app.core.agents.general.general_agent import GeneralAgent
@@ -6,8 +5,9 @@ from app.core.agents.predictor.predictor_agent import PredictorAgent
 from app.core.eval import pending
 from app.core.interpreter import interpret
 from app.core.memory import long_term, short_term
-from app.infra.repositories import prediction_repository as eval_repo
 from app.core.router import Router
+from app.infra.repositories import prediction_repository as eval_repo
+from app.services import conversation_service
 from app.utils.logger import logged, logger
 
 
@@ -49,7 +49,8 @@ class DispatchService:
 
         事件类型：status（进度）/ token（回答分段）/ done（带 session_id）。
         """
-        session_id = session_id or uuid.uuid4().hex        # 没带就新开一个会话
+        # 确保会话存在且属于该用户（没传 session_id 就新建一个），再走后续流程
+        session_id = await conversation_service.ensure_session(user_id, session_id)
         history = await short_term.load_history(session_id)
         profile = await long_term.get_profile(user_id) if user_id else ""
 
@@ -64,7 +65,8 @@ class DispatchService:
         answer = "".join(parts)
 
         await self._persist_prediction(user_id, session_id)         # 若本轮是预测，入库供赛后评估
-        await short_term.append_turn(session_id, question, answer)  # 记住本轮
+        await short_term.append_turn(session_id, question, answer)  # Redis 热窗口（喂 LLM 上下文）
+        await conversation_service.record_turn(session_id, question, answer)  # MySQL 持久化（供查看历史）
         yield {"type": "done", "session_id": session_id}
 
     async def _persist_prediction(self, user_id: str | None, session_id: str) -> None:

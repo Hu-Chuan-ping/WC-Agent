@@ -24,6 +24,17 @@ async def ensure_table() -> None:
             await cur.execute(_DDL)
 
 
+async def get_by_id(user_id: str) -> dict | None:
+    """按 id 查用户（取用户名用）。"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.cursor(aiomysql.DictCursor) as cur:
+            await cur.execute(
+                "SELECT id, username, created_at FROM users WHERE id = %s", (user_id,)
+            )
+            return await cur.fetchone()
+
+
 async def get_by_username(username: str) -> dict | None:
     """按用户名查用户；不存在返回 None。"""
     pool = await get_pool()

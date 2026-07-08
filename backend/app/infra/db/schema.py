@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.infra.repositories import (
+    conversation_repository,
     prediction_repository,
     profile_repository,
     user_repository,
@@ -11,6 +12,7 @@ from app.infra.repositories import (
 
 
 async def ensure_all_tables() -> None:
-    await user_repository.ensure_table()        # users（账号凭证）
-    await profile_repository.ensure_table()     # user_profile（长期画像）
-    await prediction_repository.ensure_table()  # predictions（预测评估）
+    await user_repository.ensure_table()          # users（账号凭证）
+    await profile_repository.ensure_table()       # user_profile（长期画像）
+    await prediction_repository.ensure_table()    # predictions（预测评估）
+    await conversation_repository.ensure_table()  # sessions + messages（对话）

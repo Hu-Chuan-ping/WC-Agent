@@ -59,6 +59,14 @@ class AuthError(AppError):
     message = "身份验证失败"
 
 
+class NotFoundError(AppError):
+    """资源不存在或不属于当前用户（不区分二者，避免泄露存在性）。"""
+
+    code = 4040
+    http_status = 404
+    message = "资源不存在"
+
+
 # ── 服务端 / 内部类（5xxx）────────────────────────────────────────
 
 class ConfigError(AppError):
