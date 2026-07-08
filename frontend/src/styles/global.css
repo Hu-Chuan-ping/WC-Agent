@@ -26,3 +26,17 @@ body {
   border-radius: 16px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
 }
+
+/* 侧边栏里的历史会话项 */
+.session-item {
+  padding: 9px 12px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.session-item:hover {
+  background: #f0f2f5;
+}
+.session-item.active {
+  background: #eef1ea;
+}

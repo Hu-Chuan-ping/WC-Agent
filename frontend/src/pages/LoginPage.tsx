@@ -211,6 +211,24 @@ export default function LoginPage() {
             </Button>
           </Form.Item>
         </Form>
+
+        {/* 仅开发模式：跳过登录直接预览内页（不连后端）。打包上线自动消失。 */}
+        {import.meta.env.DEV && (
+          <Button
+            type="link"
+            block
+            style={{ marginTop: 12, color: colors.textSecondary }}
+            onClick={() => {
+              setAuth("preview-token", {
+                user_id: "preview",
+                username: "预览用户",
+              });
+              navigate("/chat", { replace: true });
+            }}
+          >
+            跳过登录 · 预览界面（仅开发）
+          </Button>
+        )}
       </Card>
     </div>
   );

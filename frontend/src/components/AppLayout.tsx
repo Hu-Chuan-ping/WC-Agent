@@ -1,8 +1,10 @@
-import { Avatar, Button, Layout, Menu, Typography } from "antd";
+import { Avatar, Button, Dropdown, Layout, Menu, Typography, type MenuProps } from "antd";
 import {
   BarChartOutlined,
   LogoutOutlined,
   MessageOutlined,
+  MoreOutlined,
+  PlusOutlined,
   UserOutlined,
 } from "@ant-design/icons";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
@@ -11,15 +13,25 @@ import { colors } from "../theme/theme";
 
 const { Header, Sider, Content } = Layout;
 
+// 用户信息不放进导航，只通过底部用户点击进入。
 const NAV_ITEMS = [
   { key: "/chat", icon: <MessageOutlined />, label: "对话预测" },
   { key: "/predictions", icon: <BarChartOutlined />, label: "已预测比赛" },
-  { key: "/profile", icon: <UserOutlined />, label: "用户信息" },
+];
+
+// 历史对话（静态假数据，切片 2 接入后端会话接口后替换）。
+const MOCK_SESSIONS = [
+  { id: "1", title: "阿根廷 vs 法国 会不会重演决赛" },
+  { id: "2", title: "英格兰小组出线概率" },
+  { id: "3", title: "巴西 vs 德国 谁会赢" },
+  { id: "4", title: "本届黑马球队分析" },
 ];
 
 /**
- * 登录后的主框架：顶部 Logo 栏 + 左侧导航侧边栏（底部为当前用户 + 退出），
- * 右侧内容区由子路由通过 <Outlet /> 渲染。
+ * 登录后的主框架：
+ *  顶部 Logo 栏；
+ *  左侧栏 = 功能导航 + 新建对话 + 可滚动历史对话 + 底部用户（点击弹出菜单）；
+ *  右侧内容区由子路由通过 <Outlet /> 渲染。
  */
 export default function AppLayout() {
   const navigate = useNavigate();
@@ -27,12 +39,22 @@ export default function AppLayout() {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
 
-  const selectedKey =
-    NAV_ITEMS.find((i) => location.pathname.startsWith(i.key))?.key || "/chat";
+  // 命中导航项才高亮；用户信息页不属于导航，故可能为空（不高亮任何项）。
+  const selectedKey = NAV_ITEMS.find((i) => location.pathname.startsWith(i.key))?.key;
 
-  const onLogout = () => {
-    logout();
-    navigate("/login", { replace: true });
+  const userMenu: MenuProps["items"] = [
+    { key: "profile", icon: <UserOutlined />, label: "查看用户信息" },
+    { type: "divider" },
+    { key: "logout", icon: <LogoutOutlined />, label: "退出登录", danger: true },
+  ];
+
+  const onUserMenuClick: MenuProps["onClick"] = ({ key }) => {
+    if (key === "profile") {
+      navigate("/profile");
+    } else if (key === "logout") {
+      logout();
+      navigate("/login", { replace: true });
+    }
   };
 
   return (
@@ -53,38 +75,82 @@ export default function AppLayout() {
       </Header>
 
       <Layout style={{ background: "transparent" }}>
-        <Sider
-          width={240}
-          style={{
-            borderRight: `1px solid ${colors.border}`,
-            display: "flex",
-            flexDirection: "column",
-          }}
-        >
-          <Menu
-            mode="inline"
-            selectedKeys={[selectedKey]}
-            onClick={({ key }) => navigate(key)}
-            items={NAV_ITEMS}
-            style={{ borderInlineEnd: "none", paddingTop: 12, flex: 1 }}
-          />
+        <Sider width={260} style={{ borderRight: `1px solid ${colors.border}` }}>
+          <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+            {/* 功能导航 */}
+            <Menu
+              mode="inline"
+              selectedKeys={selectedKey ? [selectedKey] : []}
+              onClick={({ key }) => navigate(key)}
+              items={NAV_ITEMS}
+              style={{ borderInlineEnd: "none", paddingTop: 8 }}
+            />
 
-          {/* 底部：当前登录用户 + 退出 */}
-          <div style={{ borderTop: `1px solid ${colors.border}`, padding: 16 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-              <Avatar style={{ backgroundColor: colors.sage }} icon={<UserOutlined />} />
-              <div style={{ overflow: "hidden" }}>
-                <div style={{ fontWeight: 600, whiteSpace: "nowrap", textOverflow: "ellipsis", overflow: "hidden" }}>
-                  {user?.username || "未登录"}
-                </div>
-                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                  已登录
-                </Typography.Text>
-              </div>
+            {/* 新建对话 */}
+            <div style={{ padding: "12px 12px 8px" }}>
+              <Button type="primary" icon={<PlusOutlined />} block onClick={() => navigate("/chat")}>
+                新建对话
+              </Button>
             </div>
-            <Button block icon={<LogoutOutlined />} onClick={onLogout}>
-              退出登录
-            </Button>
+
+            {/* 历史对话（可滚动） */}
+            <div style={{ padding: "0 16px 4px" }}>
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                历史对话
+              </Typography.Text>
+            </div>
+            <div style={{ flex: 1, overflowY: "auto", padding: "0 8px 8px" }}>
+              {MOCK_SESSIONS.map((s) => (
+                <div key={s.id} className="session-item" onClick={() => navigate("/chat")}>
+                  <div
+                    style={{
+                      fontSize: 14,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}
+                  >
+                    {s.title}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* 底部：当前用户，点击弹出菜单 */}
+            <Dropdown
+              menu={{ items: userMenu, onClick: onUserMenuClick }}
+              trigger={["click"]}
+              placement="topRight"
+            >
+              <div
+                style={{
+                  borderTop: `1px solid ${colors.border}`,
+                  padding: "12px 16px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  cursor: "pointer",
+                }}
+              >
+                <Avatar style={{ backgroundColor: colors.sage, flexShrink: 0 }} icon={<UserOutlined />} />
+                <div style={{ flex: 1, overflow: "hidden" }}>
+                  <div
+                    style={{
+                      fontWeight: 600,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}
+                  >
+                    {user?.username || "未登录"}
+                  </div>
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    点击查看 / 退出
+                  </Typography.Text>
+                </div>
+                <MoreOutlined style={{ color: colors.textSecondary }} />
+              </div>
+            </Dropdown>
           </div>
         </Sider>
 
