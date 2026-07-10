@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { App, Button, Empty, Input, Spin, Typography } from "antd";
+import { App, Button, Collapse, Empty, Input, Spin, Typography } from "antd";
 import { SendOutlined } from "@ant-design/icons";
 import ReactMarkdown from "react-markdown";
 import { useConversationStore } from "../store/conversationStore";
@@ -10,6 +10,8 @@ export default function ChatPage() {
   const messages = useConversationStore((s) => s.messages);
   const sending = useConversationStore((s) => s.sending);
   const loadingMessages = useConversationStore((s) => s.loadingMessages);
+  const streamingStatus = useConversationStore((s) => s.streamingStatus);
+  const statusTrail = useConversationStore((s) => s.statusTrail);
   const sendMessage = useConversationStore((s) => s.sendMessage);
 
   const [input, setInput] = useState("");
@@ -17,7 +19,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, sending]);
+  }, [messages, sending, streamingStatus]);
 
   const onSend = async () => {
     const q = input.trim();
@@ -78,19 +80,50 @@ export default function ChatPage() {
                   border: `1px solid ${colors.border}`,
                   padding: "10px 16px",
                   borderRadius: 14,
+                  minWidth: 48,
                 }}
               >
-                <ReactMarkdown>{m.content}</ReactMarkdown>
+                {m.content ? (
+                  <ReactMarkdown>{m.content}</ReactMarkdown>
+                ) : (
+                  <span style={{ color: colors.textPlaceholder }}>▋</span>
+                )}
               </div>
             </div>
           )
         )}
 
-        {sending && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, color: colors.textSecondary, marginBottom: 14 }}>
-            <Spin size="small" /> 正在分析预测…
+        {/* 分析过程：实时进度 + 可折叠留痕 */}
+        {sending && streamingStatus && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, color: colors.textSecondary, marginBottom: 10 }}>
+            <Spin size="small" /> {streamingStatus}
           </div>
         )}
+        {statusTrail.length > 0 && (
+          <Collapse
+            ghost
+            size="small"
+            style={{ marginBottom: 12 }}
+            items={[
+              {
+                key: "trail",
+                label: (
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    分析过程（{statusTrail.length} 步）
+                  </Typography.Text>
+                ),
+                children: (
+                  <div style={{ fontSize: 12, color: colors.textSecondary, lineHeight: 1.9 }}>
+                    {statusTrail.map((s, i) => (
+                      <div key={i}>· {s}</div>
+                    ))}
+                  </div>
+                ),
+              },
+            ]}
+          />
+        )}
+
         <div ref={bottomRef} />
       </div>
 
@@ -108,7 +141,13 @@ export default function ChatPage() {
           autoSize={{ minRows: 1, maxRows: 4 }}
           disabled={sending}
         />
-        <Button type="primary" icon={<SendOutlined />} onClick={onSend} loading={sending} style={{ height: "auto" }}>
+        <Button
+          type="primary"
+          icon={<SendOutlined />}
+          onClick={onSend}
+          loading={sending}
+          style={{ height: "auto" }}
+        >
           发送
         </Button>
       </div>

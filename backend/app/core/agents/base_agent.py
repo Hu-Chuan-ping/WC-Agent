@@ -79,27 +79,55 @@ class BaseAgent(ABC):
             # 无论正常返回还是异常，都打一条本次对话的工具/额度汇总
             logger.info(request_stats.summary())
 
+    # 工具调用时给前端看的进度文案
+    _TOOL_STATUS = {
+        "search_web": "🔎 正在检索最新消息…",
+        "search_history": "📚 正在查历史交锋…",
+        "get_my_predictions": "🗂 正在查你的历史预测…",
+    }
+
     async def run_stream(
         self,
         user_input: str,
         history: list[dict] | None = None,
         profile: str = "",
     ) -> AsyncIterator[dict]:
-        """流式对话。无工具 → 逐 token 流；有工具 → 降级为非流式 ReAct，整段作为单个事件。"""
-        if self._tool_schemas:
-            answer = await self.run(user_input, history, profile)
-            yield {"type": "token", "text": answer}
-            return
-
+        """流式对话。无工具 → 逐 token 流；有工具 → 流式 ReAct（调工具推进度、答案逐字流）。"""
         request_stats.start()
         try:
             system_prompt = self._compose_system(profile)
             messages: list[dict] = list(history or [])
             messages.append({"role": "user", "content": user_input})
-            async for delta in self.client.stream(
-                messages, system_prompt, max_tokens=self._max_tokens
-            ):
-                yield {"type": "token", "text": delta}
+
+            if not self._tool_schemas:
+                async for delta in self.client.stream(
+                    messages, system_prompt, max_tokens=self._max_tokens
+                ):
+                    yield {"type": "token", "text": delta}
+                return
+
+            for _ in range(self.max_iterations):
+                tool_calls = None
+                assistant_turn = None
+                async for ev in self.client.stream_events(
+                    messages, system_prompt, tools=self._tool_schemas, max_tokens=self._max_tokens
+                ):
+                    if ev["type"] == "token":
+                        yield {"type": "token", "text": ev["text"]}
+                    elif ev["type"] == "tool_calls":
+                        tool_calls = ev["tool_calls"]
+                        assistant_turn = ev["assistant_turn"]
+
+                if not tool_calls:
+                    return  # 模型给了最终答案，已逐字流出
+
+                for tc in tool_calls:
+                    yield {"type": "status", "text": self._TOOL_STATUS.get(tc.name, f"正在调用 {tc.name}…")}
+                if assistant_turn:
+                    messages.append(assistant_turn)
+                messages.extend(await self._execute_tools(tool_calls))
+
+            yield {"type": "token", "text": "（已达到最大迭代次数，未能得到最终答案。）"}
         finally:
             logger.info(request_stats.summary())
 

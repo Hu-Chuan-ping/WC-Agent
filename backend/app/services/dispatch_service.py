@@ -1,5 +1,6 @@
 from collections.abc import AsyncIterator
 
+from app.core import request_context
 from app.core.agents.general.general_agent import GeneralAgent
 from app.core.agents.predictor.predictor_agent import PredictorAgent
 from app.core.eval import pending
@@ -49,6 +50,7 @@ class DispatchService:
 
         事件类型：status（进度）/ token（回答分段）/ done（带 session_id）。
         """
+        request_context.set_current_user(user_id)   # 供工具（get_my_predictions）按当前用户过滤
         # 确保会话存在且属于该用户（没传 session_id 就新建一个），再走后续流程
         session_id = await conversation_service.ensure_session(user_id, session_id)
         history = await short_term.load_history(session_id)

@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { conversationApi, type SessionItem } from "../api/conversation";
+import { conversationApi, streamDispatch, type SessionItem } from "../api/conversation";
 
 export interface ChatMessage {
   role: string;
@@ -12,14 +12,16 @@ interface ConversationState {
   messages: ChatMessage[];
   loadingMessages: boolean;
   sending: boolean;
+  streamingStatus: string; // 当前进度（正在检索…），完成后清空
+  statusTrail: string[]; // 本轮所有进度事件，供“分析过程”折叠展示
 
   loadSessions: () => Promise<void>;
-  newConversation: () => void; // 懒创建：清空当前，首次发消息时后端才真正建会话
+  newConversation: () => void;
   selectSession: (id: string) => Promise<void>;
   sendMessage: (question: string) => Promise<void>;
   renameSession: (id: string, title: string) => Promise<void>;
   deleteSession: (id: string) => Promise<void>;
-  reset: () => void; // 退出登录时清空
+  reset: () => void;
 }
 
 export const useConversationStore = create<ConversationState>((set, get) => ({
@@ -28,15 +30,17 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
   messages: [],
   loadingMessages: false,
   sending: false,
+  streamingStatus: "",
+  statusTrail: [],
 
   loadSessions: async () => {
     set({ sessions: await conversationApi.list() });
   },
 
-  newConversation: () => set({ activeId: null, messages: [] }),
+  newConversation: () => set({ activeId: null, messages: [], statusTrail: [] }),
 
   selectSession: async (id) => {
-    set({ activeId: id, loadingMessages: true, messages: [] });
+    set({ activeId: id, loadingMessages: true, messages: [], statusTrail: [] });
     try {
       const msgs = await conversationApi.messages(id);
       set({ messages: msgs.map((m) => ({ role: m.role, content: m.content })) });
@@ -46,21 +50,34 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
   },
 
   sendMessage: async (question) => {
-    // 乐观追加用户气泡
+    // 追加用户气泡 + 一个待填充的空助手气泡
     set((s) => ({
-      messages: [...s.messages, { role: "user", content: question }],
+      messages: [
+        ...s.messages,
+        { role: "user", content: question },
+        { role: "assistant", content: "" },
+      ],
       sending: true,
+      streamingStatus: "",
+      statusTrail: [],
     }));
     try {
-      const res = await conversationApi.dispatch(question, get().activeId);
-      set((s) => ({
-        messages: [...s.messages, { role: "assistant", content: res.result }],
-        activeId: res.session_id,
-        sending: false,
-      }));
-      await get().loadSessions(); // 刷新左侧标题/排序（含新会话）
+      await streamDispatch(question, get().activeId, {
+        onStatus: (text) =>
+          set((s) => ({ streamingStatus: text, statusTrail: [...s.statusTrail, text] })),
+        onToken: (text) =>
+          set((s) => {
+            const msgs = s.messages.slice();
+            const last = msgs[msgs.length - 1];
+            msgs[msgs.length - 1] = { ...last, content: last.content + text };
+            return { messages: msgs };
+          }),
+        onDone: (session_id) => set({ activeId: session_id }),
+      });
+      set({ sending: false, streamingStatus: "" });
+      await get().loadSessions(); // 刷新左侧标题/排序
     } catch (e) {
-      set({ sending: false });
+      set({ sending: false, streamingStatus: "" });
       throw e;
     }
   },
@@ -79,5 +96,5 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     }));
   },
 
-  reset: () => set({ sessions: [], activeId: null, messages: [] }),
+  reset: () => set({ sessions: [], activeId: null, messages: [], statusTrail: [], streamingStatus: "" }),
 }));

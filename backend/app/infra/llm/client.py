@@ -104,6 +104,75 @@ class LLMClient:
         except Exception as exc:
             raise LLMError(detail=str(exc)) from exc
 
+    async def stream_events(
+        self,
+        messages: list[dict],
+        system: str,
+        tools: list[dict] | None = None,
+        max_tokens: int = 4096,
+    ) -> AsyncIterator[dict]:
+        """流式生成，同时支持工具调用（供流式 ReAct 用）。
+
+        产出事件：
+          {"type": "token", "text": ...}                     正文逐段
+          {"type": "tool_calls", "tool_calls": [...],        本轮模型请求调工具
+                                  "assistant_turn": {...}}    （在流结束时一次性给出）
+        无工具调用时只有 token 事件；有则最后追加一个 tool_calls 事件。
+        """
+        all_messages = [{"role": "system", "content": system}] + messages
+        kwargs: dict = {
+            "model": self.model,
+            "messages": all_messages,
+            "temperature": self.temperature,
+            "max_tokens": max_tokens,
+            "stream": True,
+        }
+        if tools:
+            kwargs["tools"] = self._to_openai_tools(tools)
+            kwargs["tool_choice"] = "auto"
+
+        content_parts: list[str] = []
+        # 工具调用分片按 index 累积：{index: {"id","name","args"}}
+        acc: dict[int, dict] = {}
+        try:
+            stream = await self._openai.chat.completions.create(**kwargs)
+            async for chunk in stream:
+                if not chunk.choices:
+                    continue
+                delta = chunk.choices[0].delta
+                if delta.content:
+                    content_parts.append(delta.content)
+                    yield {"type": "token", "text": delta.content}
+                for tcd in delta.tool_calls or []:
+                    slot = acc.setdefault(tcd.index, {"id": None, "name": None, "args": ""})
+                    if tcd.id:
+                        slot["id"] = tcd.id
+                    if tcd.function and tcd.function.name:
+                        slot["name"] = tcd.function.name
+                    if tcd.function and tcd.function.arguments:
+                        slot["args"] += tcd.function.arguments
+        except Exception as exc:
+            raise LLMError(detail=str(exc)) from exc
+
+        if acc:
+            tool_calls = [
+                ToolCall(id=s["id"], name=s["name"], input=json.loads(s["args"] or "{}"))
+                for s in acc.values()
+            ]
+            assistant_turn = {
+                "role": "assistant",
+                "content": "".join(content_parts) or None,
+                "tool_calls": [
+                    {
+                        "id": s["id"],
+                        "type": "function",
+                        "function": {"name": s["name"], "arguments": s["args"] or "{}"},
+                    }
+                    for s in acc.values()
+                ],
+            }
+            yield {"type": "tool_calls", "tool_calls": tool_calls, "assistant_turn": assistant_turn}
+
     def _to_openai_tools(self, tools: list[dict]) -> list[dict]:
         return [
             {
