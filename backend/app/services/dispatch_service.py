@@ -7,7 +7,7 @@ from app.core.eval import pending
 from app.core.interpreter import interpret
 from app.core.memory import long_term, short_term
 from app.core.router import Router
-from app.infra.repositories import prediction_repository as eval_repo
+from app.infra.repositories import match_repository, user_match_repository
 from app.services import conversation_service
 from app.utils.logger import logged, logger
 
@@ -72,15 +72,18 @@ class DispatchService:
         yield {"type": "done", "session_id": session_id}
 
     async def _persist_prediction(self, user_id: str | None, session_id: str) -> None:
-        """取出 predictor 暂存的结构化预测，补上 user/session 后入库。失败不影响回答。"""
+        """取出 predictor 暂存的权威预测，写 matches + match_predictions + user_match。失败不影响回答。"""
         rec = pending.take()
         if not rec:
             return
-        rec["user_id"] = user_id
-        rec["session_id"] = session_id
         try:
-            await eval_repo.insert_prediction(rec)
-            logger.info(f"预测已入库：{rec['home_cn']} vs {rec['away_cn']}")
+            match_id = rec["match"]["match_id"]
+            await match_repository.upsert_match(rec["match"])            # 赛程事实（共享）
+            await match_repository.upsert_prediction(match_id, rec["prediction"])  # 权威预测（一场一条）
+            if user_id:
+                await user_match_repository.link(user_id, match_id, session_id)    # 我问过这场
+            m = rec["match"]
+            logger.info(f"权威预测已入库 match_id={match_id}（{m.get('home_cn')} vs {m.get('away_cn')}）")
         except Exception:
             logger.exception("预测入库失败（不影响本次回答）")
 

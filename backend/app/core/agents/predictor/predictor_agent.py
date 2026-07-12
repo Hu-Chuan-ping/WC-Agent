@@ -9,13 +9,14 @@ from app.config.agent_config import AgentConfig
 from app.core.agents.base_agent import BaseAgent
 from app.core.agents.predictor.prompts import PIPELINE_SYSTEM_PROMPT, SYSTEM_PROMPT
 from app.core.eval import pending
-from app.core.eval.fixtures import match_state
+from app.core.eval.fixtures import find_match
 from app.core.tools.odds import OddsTool
 from app.core.tools.rag_search import RagSearchTool
 from app.core.tools.team_info import TeamInfoTool
 from app.core.tools.web_search import WebSearchTool
 from app.utils import request_stats
 from app.utils.logger import logger
+from app.utils.teammatch import same_team
 
 PREDICTOR_CONFIG = AgentConfig(
     temperature=0.3,
@@ -77,24 +78,28 @@ class PredictorAgent(BaseAgent):
             yield {"type": "token", "text": answer}
             return
 
+        # 定位到 football-data 的这场比赛（拿 match_id + 状态；查不到则无法入库评估）
+        match = await find_match(teams["home_en"], teams["away_en"])
+
         # 赛前 / 进行中 / 已结束 三态分流（防止给已踢完的比赛做假预测污染评估）
-        state = await match_state(teams["home_en"], teams["away_en"])
-        if state and state["status"] == "FINISHED":
-            hg, ag = state["home_goals"], state["away_goals"]
+        if match and match["status"] == "FINISHED":
+            hg, ag, ph, pa = self._orient_result(match)
+            pen = f"（点球 {ph}-{pa}）" if ph is not None else ""
             logger.info(f"[pipeline] 该场已结束 {teams['home_cn']} {hg}-{ag} {teams['away_cn']}，跳过预测")
             yield {"type": "token", "text": (
-                f"这场比赛**已经结束**了：**{teams['home_cn']} {hg} - {ag} {teams['away_cn']}**。\n\n"
+                f"这场比赛**已经结束**了：**{teams['home_cn']} {hg} - {ag} {teams['away_cn']}**{pen}。\n\n"
                 f"所以我不再做赛前预测（也不会计入评估）。想让我复盘这场，或预测别的比赛，随时说。"
             )}
             return
-        live = bool(state and state["status"] in ("IN_PLAY", "PAUSED"))
+        live = bool(match and match["status"] in ("IN_PLAY", "PAUSED"))
 
         request_stats.start()
         try:
             logger.info(f"[pipeline] 对阵 {teams['home_cn']} vs {teams['away_cn']}（{'进行中' if live else '赛前'}）")
             if live:
+                lhg, lag, _, _ = self._orient_result(match)
                 yield {"type": "status", "text":
-                       f"⚠️ 比赛进行中（当前 {state['home_goals']}-{state['away_goals']}），"
+                       f"⚠️ 比赛进行中（当前 {lhg}-{lag}），"
                        f"以下为临场分析，不计入评估"}
             yield {"type": "status",
                    "text": f"正在并行收集 {teams['home_cn']} vs {teams['away_cn']} 的数据…"}
@@ -131,8 +136,10 @@ class PredictorAgent(BaseAgent):
             structured = self._parse_prediction(full)
             if live:
                 logger.info("[pipeline] 比赛进行中，本次分析不入库（避免污染赛前评估）")
+            elif match is None:
+                logger.info("[pipeline] football-data 查不到该场赛程（无 match_id），不入库")
             else:
-                self._stash_prediction(teams, odds_data, structured)  # 只有赛前才入库
+                self._stash_prediction(teams, match, odds_data, structured)  # 赛前才入库
         finally:
             logger.info(request_stats.summary())
 
@@ -187,13 +194,28 @@ class PredictorAgent(BaseAgent):
             return f"（{name} 数据获取失败：{exc}）"
 
     @staticmethod
+    def _orient_result(match: dict) -> tuple:
+        """把 football 原生赛果对齐到【用户的主/客方向】，返回 (home_goals, away_goals, pen_home, pen_away)。"""
+        if match.get("user_is_home", True):
+            return match["home_goals"], match["away_goals"], match["pen_home"], match["pen_away"]
+        return match["away_goals"], match["home_goals"], match["pen_away"], match["pen_home"]
+
+    @staticmethod
+    def _flip_score(s: str) -> str:
+        """把 "2-1" 翻转成 "1-2"（用户主客与 football 相反时用）。"""
+        if isinstance(s, str) and "-" in s:
+            a, b = s.split("-", 1)
+            return f"{b.strip()}-{a.strip()}"
+        return s
+
+    @staticmethod
     def _parse_prediction(text: str) -> dict | None:
-        """从回答里抠出机器 JSON，校验并归一化概率。失败返回 None（不入库）。"""
-        blocks = re.findall(r"```json\s*(\{.*?\})\s*```", text, re.DOTALL)
-        raw = blocks[-1] if blocks else None
-        if raw is None:  # 容错：模型没套 ```json，就找含 p_home 的裸 JSON
-            m = re.search(r"\{[^{}]*p_home[^{}]*\}", text, re.DOTALL)
-            raw = m.group(0) if m else None
+        """从回答里抠出机器 JSON，校验并归一化 1x2 概率 + 比分分布。失败返回 None（不入库）。"""
+        blocks = re.findall(r"```json\s*(.*?)```", text, re.DOTALL)  # 含嵌套数组，取整块
+        raw = blocks[-1].strip() if blocks else None
+        if not raw:  # 容错：没套 fence，取第一个 { 到最后一个 }
+            i, j = text.find("{"), text.rfind("}")
+            raw = text[i:j + 1] if i >= 0 and j > i else None
         if not raw:
             return None
         try:
@@ -205,25 +227,64 @@ class PredictorAgent(BaseAgent):
         if s <= 0:
             return None
         d["p_home"], d["p_draw"], d["p_away"] = ph / s, pd / s, pa / s  # 归一化
+
+        dist = d.get("score_dist")
+        clean: list[dict] = []
+        if isinstance(dist, list):
+            for x in dist:
+                if isinstance(x, dict) and x.get("score"):
+                    try:
+                        clean.append({"score": str(x["score"]), "p": float(x.get("p", 0))})
+                    except (ValueError, TypeError):
+                        continue
+        clean = [x for x in clean if x["p"] > 0]
+        tot = sum(x["p"] for x in clean)
+        if tot > 0:
+            for x in clean:
+                x["p"] = round(x["p"] / tot, 4)
+        clean.sort(key=lambda x: x["p"], reverse=True)
+        d["score_dist"] = clean
         return d
 
     def _stash_prediction(
-        self, teams: dict, odds_data: dict | None, structured: dict | None
+        self, teams: dict, match: dict, odds_data: dict | None, structured: dict | None
     ) -> None:
-        """把结构化预测暂存到 contextvar，交给 dispatch 补 user_id/session_id 后入库。"""
+        """把预测规范化到 football 原生主客方向，暂存交给 dispatch 写 matches/match_predictions/user_match。"""
         if structured is None:
             logger.warning("[pipeline] 预测未产出结构化 JSON，跳过入库")
             return
-        odds_probs = (odds_data or {}).get("probs") or {}
+        uih = match.get("user_is_home", True)
+
+        # agent 概率对齐到 football 主客
+        p_home = structured["p_home"] if uih else structured["p_away"]
+        p_away = structured["p_away"] if uih else structured["p_home"]
+        dist = [
+            {"score": s if uih else self._flip_score(s), "p": x["p"]}
+            for x in structured["score_dist"] for s in [x["score"]]
+        ]
+        top_score = dist[0]["score"] if dist else None
+
+        # 赔率概率对齐到 football 主客（OddsTool 按赔率商的 home 给，未必同向）
+        oprobs = (odds_data or {}).get("probs") or {}
+        if oprobs and (odds_data or {}).get("home_team") \
+                and not same_team(odds_data["home_team"], match["home_team"]):
+            oprobs = {"home": oprobs.get("away"), "draw": oprobs.get("draw"), "away": oprobs.get("home")}
+
         extra = {k: structured[k] for k in ("total_goals", "btts") if k in structured}
-        pending.stash({
-            "home_team": teams["home_en"], "away_team": teams["away_en"],
-            "home_cn": teams["home_cn"], "away_cn": teams["away_cn"],
-            "kickoff_time": (odds_data or {}).get("commence_time"),
-            "agent_p_home": structured["p_home"], "agent_p_draw": structured["p_draw"],
-            "agent_p_away": structured["p_away"], "agent_score": structured.get("score"),
-            "odds_p_home": odds_probs.get("home"), "odds_p_draw": odds_probs.get("draw"),
-            "odds_p_away": odds_probs.get("away"),
+        match_rec = {
+            "match_id": match["match_id"], "competition": match.get("competition", "WC"),
+            "home_team": match["home_team"], "away_team": match["away_team"],
+            "home_cn": teams["home_cn"] if uih else teams["away_cn"],
+            "away_cn": teams["away_cn"] if uih else teams["home_cn"],
+            "kickoff_time": match.get("kickoff_time"), "status": match.get("status"),
+            "duration": match.get("duration"),
+        }
+        pred_rec = {
+            "p_home": p_home, "p_draw": structured["p_draw"], "p_away": p_away,
+            "score_dist": json.dumps(dist, ensure_ascii=False), "top_score": top_score,
+            "odds_p_home": oprobs.get("home"), "odds_p_draw": oprobs.get("draw"),
+            "odds_p_away": oprobs.get("away"),
             "extra_json": json.dumps(extra, ensure_ascii=False),
-        })
-        logger.info("[pipeline] 结构化预测已暂存，待入库")
+        }
+        pending.stash({"match": match_rec, "prediction": pred_rec})
+        logger.info(f"[pipeline] 权威预测已暂存 match_id={match['match_id']}，待入库")

@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from app.infra.repositories import (
     conversation_repository,
-    prediction_repository,
+    match_repository,
     profile_repository,
+    user_match_repository,
     user_repository,
 )
 
@@ -14,5 +15,6 @@ from app.infra.repositories import (
 async def ensure_all_tables() -> None:
     await user_repository.ensure_table()          # users（账号凭证）
     await profile_repository.ensure_table()       # user_profile（长期画像）
-    await prediction_repository.ensure_table()    # predictions（预测评估）
     await conversation_repository.ensure_table()  # sessions + messages（对话）
+    await match_repository.ensure_table()         # matches + match_predictions（赛果+权威预测）
+    await user_match_repository.ensure_table()    # user_match（用户↔问过的比赛）

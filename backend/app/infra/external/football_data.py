@@ -12,12 +12,47 @@ from app.utils.logger import logger
 _TIMEOUT = 20.0
 
 
-async def fetch_wc_matches(status: str | None = None) -> list[dict]:
-    """拉世界杯赛程/赛果，归一化为内部结构。
+def _extract_score(score: dict) -> tuple[int | None, int | None, int | None, int | None]:
+    """从 football-data 的 score 结构解析出【常规比分】与【点球比分】。
 
-    status: 传 "FINISHED" 只要已结束的；None 拉全部。
-    返回每场：{"home","away","status","home_goals","away_goals"}
-    （home_goals/away_goals 在未开赛时为 None）。
+    - 点球赛(PENALTY_SHOOTOUT)：fullTime 含点球，真正结果是 regularTime(如 0-0)；penalties 单列。
+    - 加时决出(EXTRA_TIME)：fullTime 就是加时后的胜负比分，直接用。
+    - 常规(REGULAR)：fullTime 即结果。
+    返回 (home_goals, away_goals, pen_home, pen_away)，无则 None。
+    """
+    duration = score.get("duration")
+    ft = score.get("fullTime") or {}
+    if duration == "PENALTY_SHOOTOUT":
+        reg = score.get("regularTime") or {}
+        pen = score.get("penalties") or {}
+        return reg.get("home"), reg.get("away"), pen.get("home"), pen.get("away")
+    return ft.get("home"), ft.get("away"), None, None
+
+
+def _normalize(m: dict) -> dict:
+    """把一场 football-data 比赛归一化成内部结构。"""
+    score = m.get("score") or {}
+    hg, ag, ph, pa = _extract_score(score)
+    return {
+        "match_id": str(m["id"]),
+        "competition": "WC",
+        "home_team": m["homeTeam"]["name"],
+        "away_team": m["awayTeam"]["name"],
+        "kickoff_time": m.get("utcDate"),
+        "status": m["status"],
+        "duration": score.get("duration"),
+        "home_goals": hg,
+        "away_goals": ag,
+        "pen_home": ph,
+        "pen_away": pa,
+    }
+
+
+async def fetch_wc_matches(status: str | None = None) -> list[dict]:
+    """拉世界杯赛程/赛果，归一化。status 传 "FINISHED" 只要已结束的；None 拉全部。
+
+    每场：{match_id, competition, home_team, away_team, kickoff_time, status, duration,
+           home_goals, away_goals, pen_home, pen_away}（未开赛时比分为 None）。
     """
     headers = {"X-Auth-Token": settings.football_data_api_key}
     url = f"{settings.football_data_base_url}/competitions/WC/matches"
@@ -27,18 +62,7 @@ async def fetch_wc_matches(status: str | None = None) -> list[dict]:
         r = await c.get(url, headers=headers)
         r.raise_for_status()
         data = r.json()
-
-    out: list[dict] = []
-    for m in data.get("matches", []):
-        ft = (m.get("score") or {}).get("fullTime") or {}
-        out.append({
-            "home": m["homeTeam"]["name"],
-            "away": m["awayTeam"]["name"],
-            "status": m["status"],
-            "home_goals": ft.get("home"),
-            "away_goals": ft.get("away"),
-        })
-    return out
+    return [_normalize(m) for m in data.get("matches", [])]
 
 
 async def fetch_wc_matches_safe(status: str | None = None) -> list[dict] | None:

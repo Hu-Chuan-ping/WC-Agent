@@ -5,13 +5,19 @@ from pydantic import BaseModel
 # 预测记录相关接口的响应模型。
 
 
+class ScoreProb(BaseModel):
+    score: str
+    p: float
+
+
 class PredictionItem(BaseModel):
-    id: int
+    match_id: str
     match: str                     # "主队 vs 客队"
     kickoff_time: str | None = None
-    predicted_score: str | None = None
+    predicted_score: str | None = None       # 概率最高比分
     predicted_probs: str           # "主/平/客"，如 "0.50/0.30/0.20"
-    actual_score: str | None = None  # 已结算才有，如 "1-2"
+    score_dist: list[ScoreProb] = []          # 多概率比分分布
+    actual_score: str | None = None  # 已结算才有，如 "0-0（4-3）"
     status: str                    # pending / hit / half / miss
     session_id: str | None = None
 
@@ -22,17 +28,21 @@ class PredictionSummary(BaseModel):
     hit: int
     half: int
     miss: int
-    hit_rate: float | None = None       # 全中率 = hit / resolved
+    hit_rate: float | None = None
+    avg_rps_agent: float | None = None
+    avg_rps_odds: float | None = None
     avg_brier_agent: float | None = None
     avg_brier_odds: float | None = None
-    beats_odds: int = 0                 # 你的 Brier 低于赔率的场次
+    beats_odds: int = 0            # 你 RPS 低于赔率的场次
 
 
 class OverviewResponse(BaseModel):
-    """全局：所有用户、所有比赛的总预测偏差（展示 agent 整体水平）。"""
+    """全局：所有权威预测的总偏差（agent 整体水平）。"""
 
     total: int
     resolved: int
+    avg_rps_agent: float | None = None
+    avg_rps_odds: float | None = None
     avg_brier_agent: float | None = None
     avg_brier_odds: float | None = None
     verdict: str

@@ -17,11 +17,25 @@ const STATUS_META: Record<PredictionItem["status"], { text: string; color: strin
   miss: { text: "未中", color: "red" },
 };
 
+function fmtKickoff(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  // 转北京时间展示
+  return d.toLocaleString("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 const columns: ColumnsType<PredictionItem> = [
   { title: "比赛信息", dataIndex: "match", key: "match" },
-  { title: "比赛时间", dataIndex: "kickoff_time", key: "kickoff_time", render: (v) => v || "—" },
+  { title: "比赛时间（北京）", dataIndex: "kickoff_time", key: "kickoff_time", render: fmtKickoff },
   {
-    title: "预测比分",
+    title: "最可能比分",
     dataIndex: "predicted_score",
     key: "predicted_score",
     render: (v) => <span style={{ color: colors.gold, fontWeight: 600 }}>{v || "—"}</span>,
@@ -102,6 +116,10 @@ export default function PredictionsPage() {
             />
             <Stat label="击败赔率" value={`${summary.beats_odds} 场`} color={colors.sage} />
             <Stat
+              label="平均 RPS（你/赔率）越低越准"
+              value={`${fmt(summary.avg_rps_agent)} / ${fmt(summary.avg_rps_odds)}`}
+            />
+            <Stat
               label="平均 Brier（你/赔率）"
               value={`${fmt(summary.avg_brier_agent)} / ${fmt(summary.avg_brier_odds)}`}
             />
@@ -110,16 +128,42 @@ export default function PredictionsPage() {
         </Card>
       )}
 
-      <Card loading={loading} title="预测明细">
-        <Table<PredictionItem> rowKey="id" columns={columns} dataSource={rows} pagination={{ pageSize: 10 }} />
+      <Card loading={loading} title="预测明细（点开看多概率比分）">
+        <Table<PredictionItem>
+          rowKey="match_id"
+          columns={columns}
+          dataSource={rows}
+          pagination={{ pageSize: 10 }}
+          expandable={{
+            expandedRowRender: (r) => (
+              <div style={{ paddingLeft: 8 }}>
+                <div style={{ marginBottom: 6, color: colors.textSecondary }}>
+                  胜/平/负概率：<b>{r.predicted_probs}</b>
+                </div>
+                <div style={{ color: colors.textSecondary, marginBottom: 4 }}>比分分布：</div>
+                {r.score_dist.length === 0 ? (
+                  <Typography.Text type="secondary">—</Typography.Text>
+                ) : (
+                  <Space size={12} wrap>
+                    {r.score_dist.map((d) => (
+                      <span key={d.score} style={{ fontSize: 13 }}>
+                        <b style={{ color: colors.gold }}>{d.score}</b>：{Math.round(d.p * 100)}%
+                      </span>
+                    ))}
+                  </Space>
+                )}
+              </div>
+            ),
+          }}
+        />
       </Card>
 
       {overview && (
         <Card title="全局总预测偏差（所有比赛）">
           <Space size={40} wrap>
             <Stat label="全局已结算" value={`${overview.resolved} / ${overview.total}`} />
-            <Stat label="平均 Brier · 你" value={fmt(overview.avg_brier_agent)} color={colors.sage} />
-            <Stat label="平均 Brier · 赔率" value={fmt(overview.avg_brier_odds)} color={colors.gold} />
+            <Stat label="平均 RPS · 你" value={fmt(overview.avg_rps_agent)} color={colors.sage} />
+            <Stat label="平均 RPS · 赔率" value={fmt(overview.avg_rps_odds)} color={colors.gold} />
           </Space>
           <Typography.Paragraph style={{ marginTop: 16, marginBottom: 0 }}>
             {overview.verdict}
@@ -137,7 +181,7 @@ function fmt(v: number | null): string {
 function Stat({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
     <div>
-      <div style={{ fontSize: 26, fontWeight: 700, color: color || colors.textPrimary }}>{value}</div>
+      <div style={{ fontSize: 24, fontWeight: 700, color: color || colors.textPrimary }}>{value}</div>
       <div style={{ color: colors.textSecondary, fontSize: 13 }}>{label}</div>
     </div>
   );
@@ -145,11 +189,9 @@ function Stat({ label, value, color }: { label: string; value: string; color?: s
 
 function DistributionBar({ hit, half, miss }: { hit: number; half: number; miss: number }) {
   const total = hit + half + miss;
-  if (total === 0) {
-    return <Typography.Text type="secondary">暂无已结算的预测</Typography.Text>;
-  }
+  if (total === 0) return <Typography.Text type="secondary">暂无已结算的预测</Typography.Text>;
   const seg = (n: number, bg: string) =>
-    n > 0 ? <div style={{ width: `${(n / total) * 100}%`, background: bg }} /> : null;
+    n > 0 ? <div key={bg} style={{ width: `${(n / total) * 100}%`, background: bg }} /> : null;
   return (
     <div>
       <div style={{ display: "flex", height: 16, borderRadius: 8, overflow: "hidden", marginBottom: 8 }}>

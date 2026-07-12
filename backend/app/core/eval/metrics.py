@@ -38,3 +38,16 @@ def log_loss(p_home: float, p_draw: float, p_away: float, outcome: str) -> float
     """交叉熵：对"自信地错"惩罚更重。"""
     p = {"home": p_home, "draw": p_draw, "away": p_away}[outcome]
     return -math.log(min(max(p, 1e-9), 1.0))
+
+
+def rps(p_home: float, p_draw: float, p_away: float, outcome: str) -> float:
+    """排序概率得分（Ranked Probability Score），足球 1x2 的标准指标。
+
+    主/平/客是【有序】的：预测客胜却主胜，比预测平局更离谱，RPS 会按"错多远"惩罚，
+    Brier 则不区分。用累积概率与累积实际的均方差衡量。范围 0~1，越低越准。
+    """
+    o = _ONEHOT[outcome]
+    # 累积到前 1、前 2 项（第 3 项累积恒为 1，无需算）
+    cp1, cp2 = p_home, p_home + p_draw
+    co1, co2 = o[0], o[0] + o[1]
+    return 0.5 * ((cp1 - co1) ** 2 + (cp2 - co2) ** 2)
