@@ -177,7 +177,7 @@ export default function ChatPage() {
       </div>
 
       {contextStat && (
-        <div style={{ marginTop: 6, display: "flex", justifyContent: "flex-end" }}>
+        <div style={{ marginTop: 6, display: "flex", justifyContent: "flex-start" }}>
           <TokenRing stat={contextStat} />
         </div>
       )}

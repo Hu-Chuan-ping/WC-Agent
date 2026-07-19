@@ -3,19 +3,20 @@ import type { ExpertTake } from "../api/conversation";
 import { colors } from "../theme/theme";
 
 // 圆桌专家会诊卡片：三张(状态/历史/市场)平铺在最终答案上方，会诊时错峰淡入。
+// 每位专家用专属主题色（顶部色条 + 图标 + 标题同色）降低识别成本；三级字体层级。
 // 数据两路：直播时来自 store 当轮 experts；翻历史时来自 message.meta.experts。
 
 const ACCENTS: Record<string, { emoji: string; color: string }> = {
-  status: { emoji: "⚡", color: colors.sage }, // 状态/战力 —— 鼠尾草绿
-  history: { emoji: "📚", color: colors.gold }, // 历史交锋 —— 暖金
-  market: { emoji: "💹", color: "#8CA6B5" }, // 市场 —— 柔蓝
+  status: { emoji: "⚡", color: "#7EA06E" }, // 状态/战力 —— 绿色（竞技/状态）
+  history: { emoji: "📚", color: "#9B84C4" }, // 历史交锋 —— 紫色（历史/档案）
+  market: { emoji: "💹", color: "#6A93C0" }, // 市场 —— 蓝色（金融/数据）
 };
 const FALLBACK = { emoji: "🧠", color: colors.sage };
 
 export default function ExpertCards({ experts }: { experts?: ExpertTake[] }) {
   if (!experts || experts.length === 0) return null;
   return (
-    <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 10, width: "100%" }}>
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 12, width: "100%" }}>
       <style>{`@keyframes expertIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}`}</style>
       {experts.map((e, i) => {
         const a = ACCENTS[e.name] ?? FALLBACK;
@@ -23,24 +24,27 @@ export default function ExpertCards({ experts }: { experts?: ExpertTake[] }) {
           <div
             key={e.name + i}
             style={{
-              flex: "1 1 220px",
-              minWidth: 200,
+              flex: "1 1 240px",
+              minWidth: 220,
               background: colors.bgCard,
               border: `1px solid ${colors.border}`,
-              borderLeft: `3px solid ${a.color}`,
+              borderTop: `3px solid ${a.color}`, // 顶部色条区分维度
               borderRadius: 12,
-              padding: "8px 12px",
-              fontSize: 12.5,
-              lineHeight: 1.6,
-              color: colors.textSecondary,
+              padding: 18,
               animation: "expertIn .35s ease both",
               animationDelay: `${i * 90}ms`,
             }}
           >
-            <div style={{ fontWeight: 600, color: colors.textPrimary, marginBottom: 4 }}>
-              {a.emoji} {e.title}
+            {/* 标题：图标 + 名称，同专属色，16px/600 */}
+            <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 10 }}>
+              <span style={{ fontSize: 16, lineHeight: 1 }}>{a.emoji}</span>
+              <span style={{ fontSize: 16, fontWeight: 600, color: a.color }}>{e.title}</span>
             </div>
-            <div className="md-body md-compact">
+            {/* 正文：14px/400，行高 1.6 */}
+            <div
+              className="md-body"
+              style={{ fontSize: 14, lineHeight: 1.6, color: colors.textPrimary }}
+            >
               <ReactMarkdown>{e.text}</ReactMarkdown>
             </div>
           </div>
