@@ -72,10 +72,11 @@ async def run_roundtable(
             take = f"（{sp.title}分析失败，本维度意见缺失：{exc}）"
         return sp, take
 
-    results = await asyncio.gather(*(_one(sp) for sp in SPECIALISTS))
-
+    # as_completed：谁先分析完谁先冒出来 —— 前端卡片真错峰出现，而非齐刷刷一次到齐
     take_blocks: list[str] = []
-    for sp, take in results:
+    tasks = [asyncio.create_task(_one(sp)) for sp in SPECIALISTS]
+    for coro in asyncio.as_completed(tasks):
+        sp, take = await coro
         yield {"type": "expert", "name": sp.name, "title": sp.title, "text": take}
         take_blocks.append(f"## {sp.title}的意见\n{take}")
     takes_joined = "\n\n".join(take_blocks)

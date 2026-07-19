@@ -9,9 +9,16 @@ export interface SessionItem {
   updated_at: string;
 }
 
+export interface ExpertTake {
+  name: string;
+  title: string;
+  text: string;
+}
+
 export interface MessageItem {
   role: string;
   content: string;
+  meta?: { experts?: ExpertTake[] } | null;
   created_at: string;
 }
 
@@ -34,6 +41,7 @@ export const conversationApi = {
 export interface StreamHandlers {
   onStatus: (text: string) => void; // 进度事件（正在检索…）
   onToken: (text: string) => void; // 正文逐段
+  onExpert?: (e: ExpertTake) => void; // 圆桌某专家的意见（渲成卡片）
   onDone: (session_id: string) => void; // 完成，带后端确定的 session_id
 }
 
@@ -81,7 +89,13 @@ export async function streamDispatch(
       if (!line.startsWith("data:")) continue;
       const payload = line.slice(5).trim();
       if (!payload) continue;
-      let ev: { type: string; text?: string; session_id?: string };
+      let ev: {
+        type: string;
+        text?: string;
+        session_id?: string;
+        name?: string;
+        title?: string;
+      };
       try {
         ev = JSON.parse(payload);
       } catch {
@@ -89,6 +103,8 @@ export async function streamDispatch(
       }
       if (ev.type === "status" && ev.text) handlers.onStatus(ev.text);
       else if (ev.type === "token" && ev.text) handlers.onToken(ev.text);
+      else if (ev.type === "expert" && ev.name && ev.title && ev.text)
+        handlers.onExpert?.({ name: ev.name, title: ev.title, text: ev.text });
       else if (ev.type === "done" && ev.session_id) handlers.onDone(ev.session_id);
     }
   }

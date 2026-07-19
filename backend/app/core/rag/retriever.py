@@ -51,9 +51,12 @@ def retrieve(
                 logger.info(f"  [{sim:.3f}]✓交锋 {m.get('year')} {m.get('stage')} "
                             f"{m.get('home')} {m.get('score')} {m.get('away')}")
             return _format(h2h)
-        logger.info(f"RAG「{query}」→ {team_a} vs {team_b} 无历史交锋，回退纯向量")
+        # 给了两队却无交锋：不回退纯向量——那只会按语义捞出某一队的无关比赛
+        # （如"阿根廷 vs 西班牙"捞出"阿根廷 vs 墨西哥"），误导历史专家。
+        logger.info(f"RAG「{query}」→ {team_a} vs {team_b} 无直接历史交锋，不回退纯向量")
+        return "两队无直接历史交锋记录（本知识库覆盖 2006-2022 世界杯）。"
 
-    # 回退：没给两队 或 两队无交锋 → 纯向量 + 阈值
+    # 未给两队（开放式历史查询，如 ReAct 追问）→ 纯向量 + 阈值
     logger.info(f"RAG「{query}」→ 纯向量（阈值 {settings.rag_min_sim}）：")
     kept: list[tuple] = []
     for doc, meta, dist in hits[:k]:

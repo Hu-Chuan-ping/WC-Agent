@@ -31,6 +31,7 @@ class SessionItem(BaseModel):
 class MessageItem(BaseModel):
     role: str
     content: str
+    meta: dict | None = None   # 结构化附件（如专家会诊 {"experts":[...]}）
     created_at: datetime
 
 

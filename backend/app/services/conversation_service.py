@@ -65,10 +65,18 @@ async def ensure_session(user_id: str, session_id: str | None) -> str:
     return new_id
 
 
-async def record_turn(session_id: str, user_msg: str, assistant_msg: str) -> None:
-    """把一轮对话持久化进 messages；首轮用问题生成标题；刷新活跃时间。"""
+async def record_turn(
+    session_id: str,
+    user_msg: str,
+    assistant_msg: str,
+    assistant_meta: dict | None = None,
+) -> None:
+    """把一轮对话持久化进 messages；首轮用问题生成标题；刷新活跃时间。
+
+    assistant_meta：助手消息的结构化附件（如专家会诊 {"experts":[...]}），可空。
+    """
     await repo.add_message(session_id, "user", user_msg)
-    await repo.add_message(session_id, "assistant", assistant_msg)
+    await repo.add_message(session_id, "assistant", assistant_msg, assistant_meta)
     s = await repo.get_session(session_id)
     if s and (not s["title"] or s["title"] == "新对话"):
         await repo.rename_session(session_id, _make_title(user_msg))

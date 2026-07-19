@@ -3,6 +3,7 @@ import { App, Button, Collapse, Empty, Input, Spin, Typography } from "antd";
 import { SendOutlined } from "@ant-design/icons";
 import ReactMarkdown from "react-markdown";
 import { useConversationStore } from "../store/conversationStore";
+import ExpertCards from "../components/ExpertCards";
 import { colors } from "../theme/theme";
 
 export default function ChatPage() {
@@ -71,11 +72,21 @@ export default function ChatPage() {
               </div>
             </div>
           ) : (
-            <div key={i} style={{ display: "flex", justifyContent: "flex-start", marginBottom: 14 }}>
+            <div
+              key={i}
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "flex-start",
+                maxWidth: "86%",
+                marginBottom: 14,
+              }}
+            >
+              <ExpertCards experts={m.experts} />
               <div
                 className="md-body"
                 style={{
-                  maxWidth: "82%",
+                  alignSelf: "stretch",
                   background: "#FFFFFF",
                   border: `1px solid ${colors.border}`,
                   padding: "10px 16px",

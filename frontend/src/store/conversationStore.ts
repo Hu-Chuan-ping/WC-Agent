@@ -1,9 +1,15 @@
 import { create } from "zustand";
-import { conversationApi, streamDispatch, type SessionItem } from "../api/conversation";
+import {
+  conversationApi,
+  streamDispatch,
+  type ExpertTake,
+  type SessionItem,
+} from "../api/conversation";
 
 export interface ChatMessage {
   role: string;
   content: string;
+  experts?: ExpertTake[]; // 圆桌专家意见（预测消息才有）
 }
 
 interface ConversationState {
@@ -43,7 +49,13 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     set({ activeId: id, loadingMessages: true, messages: [], statusTrail: [] });
     try {
       const msgs = await conversationApi.messages(id);
-      set({ messages: msgs.map((m) => ({ role: m.role, content: m.content })) });
+      set({
+        messages: msgs.map((m) => ({
+          role: m.role,
+          content: m.content,
+          experts: m.meta?.experts, // 历史消息里的专家会诊
+        })),
+      });
     } finally {
       set({ loadingMessages: false });
     }
@@ -70,6 +82,13 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
             const msgs = s.messages.slice();
             const last = msgs[msgs.length - 1];
             msgs[msgs.length - 1] = { ...last, content: last.content + text };
+            return { messages: msgs };
+          }),
+        onExpert: (e) =>
+          set((s) => {
+            const msgs = s.messages.slice();
+            const last = msgs[msgs.length - 1];
+            msgs[msgs.length - 1] = { ...last, experts: [...(last.experts ?? []), e] };
             return { messages: msgs };
           }),
         onDone: (session_id) => set({ activeId: session_id }),

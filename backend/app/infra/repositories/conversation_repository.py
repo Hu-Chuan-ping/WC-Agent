@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import aiomysql
 
 from app.infra.db.mysql_client import get_pool
@@ -26,6 +28,7 @@ CREATE TABLE IF NOT EXISTS messages (
     session_id VARCHAR(64) NOT NULL,
     role       VARCHAR(16) NOT NULL,
     content    MEDIUMTEXT,
+    meta       JSON NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_session (session_id)
 )
@@ -38,6 +41,19 @@ async def ensure_table() -> None:
         async with conn.cursor() as cur:
             await cur.execute(_SESSIONS_DDL)
             await cur.execute(_MESSAGES_DDL)
+            await _ensure_meta_column(cur)
+
+
+async def _ensure_meta_column(cur) -> None:
+    """给老库补 messages.meta 列（存专家会诊等消息级结构化附件）。幂等。"""
+    await cur.execute(
+        "SELECT COUNT(*) FROM information_schema.COLUMNS "
+        "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'messages' "
+        "AND COLUMN_NAME = 'meta'"
+    )
+    (exists,) = await cur.fetchone()
+    if not exists:
+        await cur.execute("ALTER TABLE messages ADD COLUMN meta JSON NULL AFTER content")
 
 
 # ── sessions ────────────────────────────────────────────────
@@ -111,27 +127,40 @@ async def delete_session(session_id: str) -> None:
 
 # ── messages ────────────────────────────────────────────────
 
-async def add_message(session_id: str, role: str, content: str) -> None:
+async def add_message(
+    session_id: str, role: str, content: str, meta: dict | None = None
+) -> None:
+    meta_json = json.dumps(meta, ensure_ascii=False) if meta is not None else None
     pool = await get_pool()
     async with pool.acquire() as conn:
         async with conn.cursor() as cur:
             await cur.execute(
-                "INSERT INTO messages (session_id, role, content) VALUES (%s, %s, %s)",
-                (session_id, role, content),
+                "INSERT INTO messages (session_id, role, content, meta) "
+                "VALUES (%s, %s, %s, %s)",
+                (session_id, role, content, meta_json),
             )
 
 
 async def list_messages(session_id: str) -> list[dict]:
-    """按时间顺序返回某会话的全部消息。"""
+    """按时间顺序返回某会话的全部消息（meta 反序列化为 dict）。"""
     pool = await get_pool()
     async with pool.acquire() as conn:
         async with conn.cursor(aiomysql.DictCursor) as cur:
             await cur.execute(
-                "SELECT role, content, created_at FROM messages "
+                "SELECT role, content, meta, created_at FROM messages "
                 "WHERE session_id = %s ORDER BY id",
                 (session_id,),
             )
-            return list(await cur.fetchall())
+            rows = list(await cur.fetchall())
+    for r in rows:
+        # JSON 列可能被驱动返回为 str，也可能已是 dict；统一成 dict|None
+        m = r.get("meta")
+        if isinstance(m, str):
+            try:
+                r["meta"] = json.loads(m)
+            except json.JSONDecodeError:
+                r["meta"] = None
+    return rows
 
 
 async def delete_messages(session_id: str) -> None:

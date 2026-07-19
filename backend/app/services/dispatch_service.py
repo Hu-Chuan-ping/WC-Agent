@@ -60,15 +60,19 @@ class DispatchService:
         interp = await interpret(question, history)         # 合并的意图理解+抽取（一次快模型）
 
         parts: list[str] = []
+        experts: list[dict] = []           # 圆桌专家意见，随消息一起入库供历史回看
         async for ev in self._router.route_stream(question, history, profile, interp):
             if ev["type"] == "token":
                 parts.append(ev["text"])
+            elif ev["type"] == "expert":
+                experts.append({"name": ev["name"], "title": ev["title"], "text": ev["text"]})
             yield ev
         answer = "".join(parts)
+        meta = {"experts": experts} if experts else None
 
         await self._persist_prediction(user_id, session_id)         # 若本轮是预测，入库供赛后评估
         await short_term.append_turn(session_id, question, answer)  # Redis 热窗口（喂 LLM 上下文）
-        await conversation_service.record_turn(session_id, question, answer)  # MySQL 持久化（供查看历史）
+        await conversation_service.record_turn(session_id, question, answer, meta)  # MySQL 持久化（供查看历史）
         yield {"type": "done", "session_id": session_id}
 
     async def _persist_prediction(self, user_id: str | None, session_id: str) -> None:
