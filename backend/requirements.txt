@@ -17,6 +17,9 @@ redis>=5.0
 aiomysql>=0.2
 cryptography>=42.0   # MySQL 8 的 caching_sha2_password 认证需要
 
+# MCP：把工具暴露成独立服务(odds_server) + agent 作为 client 消费
+mcp[cli]>=1.28
+
 # 鉴权：密码哈希 + JWT 令牌 + 图形验证码
 bcrypt>=4.0
 PyJWT>=2.8

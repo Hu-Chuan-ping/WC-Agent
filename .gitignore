@@ -33,6 +33,10 @@ build/
 .next/
 *.tsbuildinfo
 
+# ===== 个人笔记 / Office 临时锁文件（不入代码库）=====
+~$*
+/*.docx
+
 # ===== OS / IDE =====
 .DS_Store
 Thumbs.db

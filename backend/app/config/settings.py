@@ -50,6 +50,11 @@ class Settings(BaseSettings):
     rag_top_k: int = 5                                # 默认召回条数
     rag_min_sim: float = 0.5                          # 相似度阈值，低于则视为不相关丢弃
 
+    # MCP：是否把赔率工具切到 MCP server（odds_server）走协议调用。
+    # False=进程内直接调 OddsTool（默认）；True=agent 作为 MCP client 消费。
+    # 开关存在的意义：可随时回退、可 A/B 对比，切换不改业务代码。
+    use_mcp_odds: bool = False
+
     # Redis（短期会话记忆，Docker 容器 localhost:6379）
     redis_url: str = "redis://localhost:6379/0"
 

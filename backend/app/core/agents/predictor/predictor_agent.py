@@ -7,10 +7,12 @@ from collections.abc import AsyncIterator
 
 from app.config.agent_config import AgentConfig
 from app.core.agents.base_agent import BaseAgent
+from app.config.settings import settings
 from app.core.agents.predictor.prompts import PIPELINE_SYSTEM_PROMPT, SYSTEM_PROMPT
 from app.core.eval import pending
 from app.core.eval.fixtures import find_match
 from app.core.tools.odds import OddsTool
+from app.core.tools.odds_mcp import McpOddsTool
 from app.core.tools.rag_search import RagSearchTool
 from app.core.tools.team_info import TeamInfoTool
 from app.core.tools.web_search import WebSearchTool
@@ -43,7 +45,8 @@ class PredictorAgent(BaseAgent):
         # 工具照常注册：pipeline 里由代码固定调用，回退 ReAct 时由 LLM 调用
         self.register_tool(TeamInfoTool())
         self.register_tool(WebSearchTool())
-        self.register_tool(OddsTool())
+        # 赔率工具按开关选：MCP 版(走 odds_server) 或 进程内版。两者接口一致，pipeline 无感。
+        self.register_tool(McpOddsTool() if settings.use_mcp_odds else OddsTool())
         self.register_tool(RagSearchTool())
 
     async def run(

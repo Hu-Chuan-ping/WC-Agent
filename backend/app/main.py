@@ -14,10 +14,12 @@ from app.api.v1.auth import router as auth_router
 from app.api.v1.chat import router as chat_router
 from app.api.v1.prediction import router as prediction_router
 from app.api.v1.user import router as user_router
+from app.config.settings import settings
 from app.core.eval.resolver import resolve_pending
 from app.infra.db import schema
 from app.infra.db.mysql_client import close_pool
 from app.infra.db.redis_client import close_redis
+from app.infra.mcp.client import get_odds_mcp_client
 from app.utils.exceptions import AppError
 from app.utils.logger import logger
 
@@ -39,6 +41,8 @@ async def _periodic_resolve() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await schema.ensure_all_tables()   # MySQL：user_profile + predictions 表
+    if settings.use_mcp_odds:
+        await get_odds_mcp_client().connect()   # 启动 odds MCP server 子进程 + 建长连接
     try:
         await resolve_pending()       # 启动补扫：把关机期间结束的比赛补算
     except Exception:
@@ -47,6 +51,8 @@ async def lifespan(app: FastAPI):
     yield
     # 关闭时停后台任务、释放连接
     task.cancel()
+    if settings.use_mcp_odds:
+        await get_odds_mcp_client().close()
     await close_redis()
     await close_pool()
 
