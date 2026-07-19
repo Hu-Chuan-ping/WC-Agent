@@ -5,6 +5,7 @@ import ReactMarkdown from "react-markdown";
 import { useConversationStore } from "../store/conversationStore";
 import ExpertCards from "../components/ExpertCards";
 import { colors } from "../theme/theme";
+import { fmtTime } from "../utils/time";
 
 export default function ChatPage() {
   const { message } = App.useApp();
@@ -58,7 +59,7 @@ export default function ChatPage() {
 
         {messages.map((m, i) =>
           m.role === "user" ? (
-            <div key={i} style={{ display: "flex", justifyContent: "flex-end", marginBottom: 14 }}>
+            <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", marginBottom: 14 }}>
               <div
                 style={{
                   maxWidth: "78%",
@@ -70,6 +71,11 @@ export default function ChatPage() {
               >
                 {m.content}
               </div>
+              {m.created_at && (
+                <div style={{ fontSize: 11, color: colors.textPlaceholder, marginTop: 4 }}>
+                  {fmtTime(m.created_at)}
+                </div>
+              )}
             </div>
           ) : (
             <div
@@ -100,6 +106,11 @@ export default function ChatPage() {
                   <span style={{ color: colors.textPlaceholder }}>▋</span>
                 )}
               </div>
+              {m.created_at && (
+                <div style={{ fontSize: 11, color: colors.textPlaceholder, marginTop: 4 }}>
+                  {fmtTime(m.created_at)}
+                </div>
+              )}
             </div>
           )
         )}

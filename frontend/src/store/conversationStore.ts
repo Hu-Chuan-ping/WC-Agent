@@ -10,6 +10,7 @@ export interface ChatMessage {
   role: string;
   content: string;
   experts?: ExpertTake[]; // 圆桌专家意见（预测消息才有）
+  created_at?: string; // 消息时间（历史来自后端，直播用本地时间）
 }
 
 interface ConversationState {
@@ -54,6 +55,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
           role: m.role,
           content: m.content,
           experts: m.meta?.experts, // 历史消息里的专家会诊
+          created_at: m.created_at,
         })),
       });
     } finally {
@@ -63,11 +65,12 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
 
   sendMessage: async (question) => {
     // 追加用户气泡 + 一个待填充的空助手气泡
+    const now = new Date().toISOString();
     set((s) => ({
       messages: [
         ...s.messages,
-        { role: "user", content: question },
-        { role: "assistant", content: "" },
+        { role: "user", content: question, created_at: now },
+        { role: "assistant", content: "", created_at: now },
       ],
       sending: true,
       streamingStatus: "",

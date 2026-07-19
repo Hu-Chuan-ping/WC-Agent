@@ -24,6 +24,7 @@ import { useAuthStore } from "../store/authStore";
 import { useConversationStore } from "../store/conversationStore";
 import type { SessionItem } from "../api/conversation";
 import { colors } from "../theme/theme";
+import { fmtTime } from "../utils/time";
 
 const { Header, Sider, Content } = Layout;
 
@@ -149,8 +150,13 @@ export default function AppLayout() {
                   onClick={() => onSelect(s.session_id)}
                   style={{ display: "flex", alignItems: "center", gap: 6 }}
                 >
-                  <div style={{ flex: 1, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {s.title}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {s.title}
+                    </div>
+                    <div style={{ fontSize: 11, color: colors.textSecondary }}>
+                      {fmtTime(s.updated_at)}
+                    </div>
                   </div>
                   <Dropdown
                     trigger={["click"]}
