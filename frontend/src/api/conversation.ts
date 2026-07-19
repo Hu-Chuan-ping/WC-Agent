@@ -22,6 +22,12 @@ export interface MessageItem {
   created_at: string;
 }
 
+export interface ContextStats {
+  context_tokens: number;
+  max_context: number;
+  model: string;
+}
+
 export const conversationApi = {
   create: () =>
     apiClient.post<{ session_id: string; title: string }>("/sessions/create").then((r) => r.data),
@@ -36,12 +42,16 @@ export const conversationApi = {
 
   remove: (session_id: string) =>
     apiClient.post("/sessions/delete", { session_id }).then((r) => r.data),
+
+  context: (session_id: string) =>
+    apiClient.post<ContextStats>("/sessions/context", { session_id }).then((r) => r.data),
 };
 
 export interface StreamHandlers {
   onStatus: (text: string) => void; // 进度事件（正在检索…）
   onToken: (text: string) => void; // 正文逐段
   onExpert?: (e: ExpertTake) => void; // 圆桌某专家的意见（渲成卡片）
+  onContext?: (s: ContextStats) => void; // done 时的上下文占用（token 圆环）
   onDone: (session_id: string) => void; // 完成，带后端确定的 session_id
 }
 
@@ -95,6 +105,9 @@ export async function streamDispatch(
         session_id?: string;
         name?: string;
         title?: string;
+        context_tokens?: number;
+        max_context?: number;
+        model?: string;
       };
       try {
         ev = JSON.parse(payload);
@@ -105,7 +118,15 @@ export async function streamDispatch(
       else if (ev.type === "token" && ev.text) handlers.onToken(ev.text);
       else if (ev.type === "expert" && ev.name && ev.title && ev.text)
         handlers.onExpert?.({ name: ev.name, title: ev.title, text: ev.text });
-      else if (ev.type === "done" && ev.session_id) handlers.onDone(ev.session_id);
+      else if (ev.type === "done" && ev.session_id) {
+        handlers.onDone(ev.session_id);
+        if (typeof ev.context_tokens === "number" && ev.max_context && ev.model)
+          handlers.onContext?.({
+            context_tokens: ev.context_tokens,
+            max_context: ev.max_context,
+            model: ev.model,
+          });
+      }
     }
   }
 }

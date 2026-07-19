@@ -2,6 +2,7 @@ import { create } from "zustand";
 import {
   conversationApi,
   streamDispatch,
+  type ContextStats,
   type ExpertTake,
   type SessionItem,
 } from "../api/conversation";
@@ -21,6 +22,7 @@ interface ConversationState {
   sending: boolean;
   streamingStatus: string; // 当前进度（正在检索…），完成后清空
   statusTrail: string[]; // 本轮所有进度事件，供“分析过程”折叠展示
+  contextStat: ContextStats | null; // 当前会话上下文占用（token 圆环）
 
   loadSessions: () => Promise<void>;
   newConversation: () => void;
@@ -39,15 +41,17 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
   sending: false,
   streamingStatus: "",
   statusTrail: [],
+  contextStat: null,
 
   loadSessions: async () => {
     set({ sessions: await conversationApi.list() });
   },
 
-  newConversation: () => set({ activeId: null, messages: [], statusTrail: [] }),
+  newConversation: () =>
+    set({ activeId: null, messages: [], statusTrail: [], contextStat: null }),
 
   selectSession: async (id) => {
-    set({ activeId: id, loadingMessages: true, messages: [], statusTrail: [] });
+    set({ activeId: id, loadingMessages: true, messages: [], statusTrail: [], contextStat: null });
     try {
       const msgs = await conversationApi.messages(id);
       set({
@@ -58,6 +62,8 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
           created_at: m.created_at,
         })),
       });
+      // 拉取该会话的上下文占用（token 圆环）；失败不影响主流程
+      conversationApi.context(id).then((s) => set({ contextStat: s })).catch(() => void 0);
     } finally {
       set({ loadingMessages: false });
     }
@@ -94,6 +100,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
             msgs[msgs.length - 1] = { ...last, experts: [...(last.experts ?? []), e] };
             return { messages: msgs };
           }),
+        onContext: (stat) => set({ contextStat: stat }),
         onDone: (session_id) => set({ activeId: session_id }),
       });
       set({ sending: false, streamingStatus: "" });

@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import uuid
 
-from app.core.memory import short_term
+from app.config.settings import settings
+from app.core.memory import budget, long_term, short_term
 from app.infra.repositories import conversation_repository as repo
 from app.utils.exceptions import NotFoundError
 
@@ -63,6 +64,23 @@ async def ensure_session(user_id: str, session_id: str | None) -> str:
     new_id = uuid.uuid4().hex
     await repo.create_session(new_id, user_id)
     return new_id
+
+
+async def compute_context_stats(session_id: str, user_id: str | None) -> dict:
+    """当前会话上下文占用（历史窗口 + 画像的 token）/ 模型窗口。供 done 事件与圆环接口。"""
+    history = await short_term.load_history(session_id)
+    profile = await long_term.get_profile(user_id) if user_id else ""
+    return {
+        "context_tokens": budget.context_tokens(history, profile),
+        "max_context": settings.model_context_window,
+        "model": settings.deepseek_model,
+    }
+
+
+async def context_stats(user_id: str, session_id: str) -> dict:
+    """带归属校验的版本，供 /sessions/context 接口。"""
+    await _assert_owner(user_id, session_id)
+    return await compute_context_stats(session_id, user_id)
 
 
 async def record_turn(

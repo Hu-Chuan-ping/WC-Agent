@@ -6,6 +6,7 @@ from fastapi.responses import StreamingResponse
 from app.api.deps import get_current_user
 from app.models.schemas.chat import ChatRequest, ChatResponse
 from app.models.schemas.conversation import (
+    ContextStatsResponse,
     CreateSessionResponse,
     MessageItem,
     OkResponse,
@@ -58,6 +59,14 @@ async def delete_session(
     """删除对话（连带清空消息与 Redis 热窗口）。"""
     await conversation_service.delete_session(user_id, req.session_id)
     return OkResponse()
+
+
+@router.post("/sessions/context", response_model=ContextStatsResponse)
+async def session_context(
+    req: SessionIdRequest, user_id: str = Depends(get_current_user)
+):
+    """当前会话的上下文占用（token 圆环用）。"""
+    return await conversation_service.context_stats(user_id, req.session_id)
 
 
 # ── 发消息 ──────────────────────────────────────────────────

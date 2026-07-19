@@ -4,6 +4,7 @@ import { SendOutlined } from "@ant-design/icons";
 import ReactMarkdown from "react-markdown";
 import { useConversationStore } from "../store/conversationStore";
 import ExpertCards from "../components/ExpertCards";
+import TokenRing from "../components/TokenRing";
 import { colors } from "../theme/theme";
 import { fmtTime } from "../utils/time";
 
@@ -14,6 +15,7 @@ export default function ChatPage() {
   const loadingMessages = useConversationStore((s) => s.loadingMessages);
   const streamingStatus = useConversationStore((s) => s.streamingStatus);
   const statusTrail = useConversationStore((s) => s.statusTrail);
+  const contextStat = useConversationStore((s) => s.contextStat);
   const sendMessage = useConversationStore((s) => s.sendMessage);
 
   const [input, setInput] = useState("");
@@ -173,6 +175,12 @@ export default function ChatPage() {
           发送
         </Button>
       </div>
+
+      {contextStat && (
+        <div style={{ marginTop: 6, display: "flex", justifyContent: "flex-end" }}>
+          <TokenRing stat={contextStat} />
+        </div>
+      )}
     </div>
   );
 }

@@ -35,5 +35,11 @@ class MessageItem(BaseModel):
     created_at: datetime
 
 
+class ContextStatsResponse(BaseModel):
+    context_tokens: int
+    max_context: int
+    model: str
+
+
 class OkResponse(BaseModel):
     ok: bool = True

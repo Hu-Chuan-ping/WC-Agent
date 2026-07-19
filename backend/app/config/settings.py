@@ -69,6 +69,11 @@ class Settings(BaseSettings):
     session_max_messages: int = 20     # 滑动窗口保留的消息条数（约 10 轮）
     session_ttl_seconds: int = 604800  # 会话空闲过期时间（7 天）
 
+    # 上下文管理
+    model_context_window: int = 65536  # 模型上下文窗口（token 圆环的分母）
+    context_token_budget: int = 3000   # 历史窗口 token 预算，超了触发滚动摘要压缩
+    context_keep_recent: int = 6       # 压缩时保留最近多少条原文（其余摘要成梗概）
+
     # 鉴权（JWT）——上线前务必在 .env 里覆盖 jwt_secret 为随机长串
     jwt_secret: str = "dev-only-change-me-in-env"
     jwt_algorithm: str = "HS256"

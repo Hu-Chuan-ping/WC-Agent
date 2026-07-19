@@ -73,7 +73,9 @@ class DispatchService:
         await self._persist_prediction(user_id, session_id)         # 若本轮是预测，入库供赛后评估
         await short_term.append_turn(session_id, question, answer)  # Redis 热窗口（喂 LLM 上下文）
         await conversation_service.record_turn(session_id, question, answer, meta)  # MySQL 持久化（供查看历史）
-        yield {"type": "done", "session_id": session_id}
+        # done 带回当前上下文占用（供前端 token 圆环）；在压缩之后测，圆环能反映压缩效果
+        stat = await conversation_service.compute_context_stats(session_id, user_id)
+        yield {"type": "done", "session_id": session_id, **stat}
 
     async def _persist_prediction(self, user_id: str | None, session_id: str) -> None:
         """取出 predictor 暂存的权威预测，写 matches + match_predictions + user_match。失败不影响回答。"""
