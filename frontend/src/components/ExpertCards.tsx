@@ -26,7 +26,7 @@ export default function ExpertCards({ experts }: { experts?: ExpertTake[] }) {
             style={{
               flex: "1 1 240px",
               minWidth: 220,
-              height: 220, // 固定高度：三张齐平，长文本不再撑爆整行
+              height: 350, // 固定高度：三张齐平，长文本不再撑爆整行
               display: "flex",
               flexDirection: "column",
               background: colors.bgCard,
