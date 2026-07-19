@@ -41,13 +41,42 @@ export default function ChatPage() {
   return (
     <div
       className="content-surface"
-      style={{ height: "calc(100vh - 112px)", padding: 20, display: "flex", flexDirection: "column" }}
+      style={{
+        height: "calc(100vh - 112px)",
+        padding: 20,
+        display: "flex",
+        flexDirection: "column",
+        position: "relative",
+        overflow: "hidden",
+      }}
     >
-      <Typography.Title level={5} style={{ margin: "0 0 12px" }}>
+      {/* 对话框大背景：淡足球场纹理（中圈/中线/禁区/角球弧），不挡文字 */}
+      <svg
+        aria-hidden
+        viewBox="0 0 400 600"
+        preserveAspectRatio="xMidYMid slice"
+        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0.06, pointerEvents: "none", zIndex: 0 }}
+      >
+        <g fill="none" stroke={colors.sage} strokeWidth={2.5}>
+          <line x1="15" y1="300" x2="385" y2="300" />
+          <circle cx="200" cy="300" r="58" />
+          <circle cx="200" cy="300" r="4" fill={colors.sage} stroke="none" />
+          <rect x="120" y="15" width="160" height="80" />
+          <rect x="160" y="15" width="80" height="40" />
+          <rect x="120" y="505" width="160" height="80" />
+          <rect x="160" y="545" width="80" height="40" />
+          <path d="M15 30 A15 15 0 0 1 30 15" />
+          <path d="M370 15 A15 15 0 0 1 385 30" />
+          <path d="M385 570 A15 15 0 0 1 370 585" />
+          <path d="M30 585 A15 15 0 0 1 15 570" />
+        </g>
+      </svg>
+
+      <Typography.Title level={5} style={{ margin: "0 0 12px", position: "relative", zIndex: 1 }}>
         对话预测
       </Typography.Title>
 
-      <div style={{ flex: 1, overflowY: "auto", paddingRight: 4 }}>
+      <div style={{ flex: 1, overflowY: "auto", paddingRight: 4, position: "relative", zIndex: 1 }}>
         {loadingMessages && (
           <div style={{ textAlign: "center", paddingTop: 40 }}>
             <Spin />
@@ -151,7 +180,7 @@ export default function ChatPage() {
         <div ref={bottomRef} />
       </div>
 
-      <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+      <div style={{ display: "flex", gap: 8, marginTop: 12, position: "relative", zIndex: 1 }}>
         <Input.TextArea
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -177,7 +206,7 @@ export default function ChatPage() {
       </div>
 
       {contextStat && (
-        <div style={{ marginTop: 6, display: "flex", justifyContent: "flex-start" }}>
+        <div style={{ marginTop: 6, display: "flex", justifyContent: "flex-start", position: "relative", zIndex: 1 }}>
           <TokenRing stat={contextStat} />
         </div>
       )}
