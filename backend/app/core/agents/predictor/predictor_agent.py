@@ -8,7 +8,8 @@ from collections.abc import AsyncIterator
 from app.config.agent_config import AgentConfig
 from app.core.agents.base_agent import BaseAgent
 from app.config.settings import settings
-from app.core.agents.predictor.prompts import PIPELINE_SYSTEM_PROMPT, SYSTEM_PROMPT
+from app.core.agents.predictor.prompts import SYSTEM_PROMPT
+from app.core.agents.predictor.roundtable import run_roundtable
 from app.core.eval import pending
 from app.core.eval.fixtures import find_match
 from app.core.tools.odds import OddsTool
@@ -106,25 +107,18 @@ class PredictorAgent(BaseAgent):
                        f"以下为临场分析，不计入评估"}
             yield {"type": "status",
                    "text": f"正在并行收集 {teams['home_cn']} vs {teams['away_cn']} 的数据…"}
-            context, odds_data = await self._gather_context(teams)
+            slices, odds_data = await self._gather_context(teams)
 
-            yield {"type": "status", "text": "数据就绪，正在分析预测…"}
-
-            # 流式预测：边流边攒完整原文；只输出 ```json 机器块之前的内容
-            system = PIPELINE_SYSTEM_PROMPT
-            if profile:
-                system += f"\n\n<已知用户画像>\n{profile}\n</已知用户画像>"
-            user_msg = (
-                f"请预测这场比赛：{teams['home_cn']} vs {teams['away_cn']}\n"
-                f"（用户原始问题：{user_input}）\n\n"
-                f"以下是已为你收集好的多维数据：\n\n{context}"
-            )
+            # 圆桌：三专家并行会诊 → 主持人流式合成。
+            # status/expert 事件直接透传；主持人 token 沿用同一套 ```json 过滤后再输出。
             full, emitted = "", 0
-            async for delta in self.client.stream(
-                [{"role": "user", "content": user_msg}], system,
-                max_tokens=self._max_tokens,
+            async for ev in run_roundtable(
+                slices, self.client, user_input, profile, self._max_tokens
             ):
-                full += delta
+                if ev["type"] != "token":
+                    yield ev                       # status / expert 卡片，原样透传
+                    continue
+                full += ev["text"]
                 idx = full.find("```json")
                 # 没出现 fence 时保留末尾 7 字，防半个 ```json 泄给用户
                 visible = full[:idx] if idx >= 0 else (full[:-7] if len(full) > 7 else "")
@@ -147,7 +141,7 @@ class PredictorAgent(BaseAgent):
             logger.info(request_stats.summary())
 
     # ② 并行抓全维数据（赔率取结构化，既拼文本又留数字入库）
-    async def _gather_context(self, t: dict) -> tuple[str, dict | None]:
+    async def _gather_context(self, t: dict) -> tuple[dict, dict | None]:
         home_en, away_en = t["home_en"], t["away_en"]
         home_cn, away_cn = t["home_cn"], t["away_cn"]
 
@@ -168,14 +162,18 @@ class PredictorAgent(BaseAgent):
             if odds_data else "（未找到该场比赛的市场赔率）"
         )
 
-        context = (
-            f"## 主队 {home_cn}（{home_en}）结构化数据\n{ti_home}\n\n"
-            f"## 客队 {away_cn}（{away_en}）结构化数据\n{ti_away}\n\n"
-            f"## 最新动态（首发/伤病，来自搜索）\n{web}\n\n"
-            f"## 历史交锋（来自历史知识库）\n{history}\n\n"
-            f"## 市场赔率与隐含概率\n{odds_text}"
-        )
-        return context, odds_data
+        # 按维度切片，分发给对应专家（key 与 roundtable.SPECIALISTS 的 name 对齐）。
+        # 不再拼成一个大 context——每个专家只吃自己那一片（上下文隔离）。
+        slices = {
+            "status": (
+                f"## 主队 {home_cn}（{home_en}）结构化数据\n{ti_home}\n\n"
+                f"## 客队 {away_cn}（{away_en}）结构化数据\n{ti_away}\n\n"
+                f"## 最新动态（首发/伤病，来自搜索）\n{web}"
+            ),
+            "history": f"## 历史交锋（来自历史知识库）\n{history}",
+            "market": f"## 市场赔率与隐含概率\n{odds_text}",
+        }
+        return slices, odds_data
 
     async def _fetch_odds_structured(self, home_en: str, away_en: str) -> dict | None:
         request_stats.record_tool_call("get_match_odds")
