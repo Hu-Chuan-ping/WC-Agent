@@ -26,6 +26,9 @@ export default function ExpertCards({ experts }: { experts?: ExpertTake[] }) {
             style={{
               flex: "1 1 240px",
               minWidth: 220,
+              height: 220, // 固定高度：三张齐平，长文本不再撑爆整行
+              display: "flex",
+              flexDirection: "column",
               background: colors.bgCard,
               border: `1px solid ${colors.border}`,
               borderTop: `3px solid ${a.color}`, // 顶部色条区分维度
@@ -35,15 +38,22 @@ export default function ExpertCards({ experts }: { experts?: ExpertTake[] }) {
               animationDelay: `${i * 90}ms`,
             }}
           >
-            {/* 标题：图标 + 名称，同专属色，16px/600 */}
-            <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 10 }}>
+            {/* 标题：图标 + 名称，同专属色，16px/600（固定不压缩） */}
+            <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 10, flexShrink: 0 }}>
               <span style={{ fontSize: 16, lineHeight: 1 }}>{a.emoji}</span>
               <span style={{ fontSize: 16, fontWeight: 600, color: a.color }}>{e.title}</span>
             </div>
-            {/* 正文：14px/400，行高 1.6 */}
+            {/* 正文：14px/400，行高 1.6；超出部分本卡内滚动 */}
             <div
               className="md-body"
-              style={{ fontSize: 14, lineHeight: 1.6, color: colors.textPrimary }}
+              style={{
+                flex: 1,
+                overflowY: "auto",
+                fontSize: 14,
+                lineHeight: 1.6,
+                color: colors.textPrimary,
+                paddingRight: 4,
+              }}
             >
               <ReactMarkdown>{e.text}</ReactMarkdown>
             </div>
