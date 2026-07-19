@@ -55,9 +55,9 @@ export default function ChatPage() {
         aria-hidden
         viewBox="0 0 400 600"
         preserveAspectRatio="xMidYMid slice"
-        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0.06, pointerEvents: "none", zIndex: 0 }}
+        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0.16, pointerEvents: "none", zIndex: 0 }}
       >
-        <g fill="none" stroke={colors.sage} strokeWidth={2.5}>
+        <g fill="none" stroke={colors.sage} strokeWidth={3}>
           <line x1="15" y1="300" x2="385" y2="300" />
           <circle cx="200" cy="300" r="58" />
           <circle cx="200" cy="300" r="4" fill={colors.sage} stroke="none" />
@@ -94,7 +94,7 @@ export default function ChatPage() {
               <div
                 style={{
                   maxWidth: "78%",
-                  background: "#EEF1EA",
+                  background: "rgba(238,241,234,0.78)", // 半透明，透出背景球场
                   padding: "10px 14px",
                   borderRadius: 14,
                   whiteSpace: "pre-wrap",
@@ -124,7 +124,7 @@ export default function ChatPage() {
                 className="md-body"
                 style={{
                   alignSelf: "stretch",
-                  background: "#FFFFFF",
+                  background: "rgba(255,255,255,0.78)", // 半透明，透出背景球场
                   border: `1px solid ${colors.border}`,
                   padding: "10px 16px",
                   borderRadius: 14,
